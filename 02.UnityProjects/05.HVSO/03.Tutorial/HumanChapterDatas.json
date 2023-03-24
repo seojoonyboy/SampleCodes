@@ -1,0 +1,2104 @@
+[
+    {
+        "chapter": 0,
+        "chapter_name" : "txt_stage_lobby_h_tuto_chap_head",
+        "require_level" : 0,
+        "stage_number": 1,
+        "stage_Name": "txt_stage_lobby_h_tuto_1_head",
+        "stage_type": "normal",
+        "match_type": "tutorial",
+        "myHeroId": "h10001",
+        "enemyHeroId": "qh10002",
+        "map": "normal",
+        "description": "txt_stage_lobby_h_tuto_1_txt",
+        "specialRule": "적 영웅 체력 4",
+        "scripts": [
+            {
+                "Print_text": "data_stage_1031_1",
+                "methods": [
+                    {
+                        "name": "Set_Tutorial",
+                        "args" : ["on"]
+                    },
+                    {
+                        "name": "Stop_Invoke_NextTurn",
+                        "args": []
+                    },
+
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "MULIGAN"
+                        ]
+                    },
+                    {
+                        "name": "Stop_orc_summon",
+                        "args": [
+                            "units",
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "Show_Info_Modal",
+                        "args": [
+                            "block"
+                        ]
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_2-5",
+                "methods": [
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_marksman",
+                            "txt_ingame_tuto_marksman_h01_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_orcchieftain",
+                            "txt_ingame_tuto_orcchieftain_h01_script_1",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_reicm",
+                            "txt_ingame_tuto_reicm_h01_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "Disable_EndTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_orc_summon",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_6-9",
+                "methods": [
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "HUMAN"
+                        ]
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [
+                            "all"
+                        ]
+                    },                    
+                    {
+                        "name": "Wait_until",
+                        "args": [
+                            "0.5"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_3",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    }
+
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_10-13",
+                "methods": [
+                    {
+                        "name": "ChallengeStart",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "Unblock_Screen",
+                        "args": []
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [
+                            "ac10005"
+                        ]
+                    },
+                    {
+                        "name": "Wait_Multiple_Summon_ScopeLine",
+                        "args": [
+                            "1,3",
+                            "ac10005"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeEnd",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "StopHighlight",
+                        "args": []
+                    },
+                    {
+                        "name": "Highlight",
+                        "args": [
+                            "button",
+                            "endTurn"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "button",
+                            "endTurn"
+                        ]
+                    },
+                    {
+                        "name": "StopHighlight",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "BATTLE"
+                        ]
+                    },
+                    {
+                        "name": "Stop_Invoke_NextTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Line_battle_Finish",
+                        "args": [ "0" ]
+                    },
+                    {
+                        "name": "Socket_Active",
+                        "args": [ "stop" ]
+                    },
+                    {
+                        "name": "Till_On",
+                        "args": [
+                        ]
+                    },
+                    {
+                        "name": "Example_Show",
+                        "args": [ "human_1" ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_r1_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "",
+                            "1.2"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_r1_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off",
+                            "1.2"
+                        ]
+                    },
+                    {
+                        "name": "Till_Off",
+                        "args": [
+                        ]
+                    },
+                    {
+                        "name": "Example_Hide",
+                        "args": []
+                    },
+                    {
+                        "name": "Socket_Active",
+                        "args": [ "proceed" ]
+                    },
+                    {
+                        "name": "Wait_Battle_End",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_14-16",
+                "methods": [
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_r1_3",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "HUMAN"
+                        ]
+                    },
+                    {
+                        "name": "Wait_until",
+                        "args": [
+                            "1"
+                        ]
+                    }
+
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_17-19",
+                "methods": [
+                    {
+                        "name": "ChallengeStart",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [
+                            "ac10002"
+                        ]
+                    },
+                    {
+                        "name": "Unblock_Screen",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Multiple_Summon_linelimit",
+                        "args": [
+                            "2",
+                            "3",
+                            "ac10002"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeEnd",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "Highlight",
+                        "args": [
+                            "button",
+                            "endTurn"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "button",
+                            "endTurn"
+                        ]
+                    },
+                    {
+                        "name": "StopHighlight",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "BATTLE"
+                        ]
+                    },
+                    {
+                        "name": "Result_battle",
+                        "args": [
+                            "stop"
+                        ]
+                    },
+                    {
+                        "name": "Stop_Next_Turn",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Enemy_hero_Dead",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_20-25",
+                "methods": [
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_r1_4",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_orcchieftain",
+                            "txt_ingame_tuto_orcchieftain_h01_script_r1_1",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "Fadeout_Enemy",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_until",
+                        "args": [
+                            "1"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h01_script_6",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },                    
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_reicm",
+                            "txt_ingame_tuto_reicm_h01_script_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_reicm",
+                            "txt_ingame_tuto_reicm_h01_script_3",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Result_battle",
+                        "args": [
+                            "proceed"
+                        ]
+                    },
+                    {
+                        "name": "End_tutorial",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            }
+        ],
+        "scenarioReward": [
+            {
+                "reward": "exp",
+                "count": 20
+            },
+            {
+                "reward": "supply",
+                "count": 15
+            },
+            {
+                "reward": "crystal",
+                "count" : 15
+            },
+            {
+                "reward" : "goldFree",
+                "count" : 25
+            }
+        ],
+        "stageSerial" : 1
+    },
+    {
+        "chapter": 0,
+        "chapter_name" : "txt_stage_lobby_h_tuto_chap_head",
+        "require_level" : 0,
+        "stage_number": 2,
+        "stage_Name": "txt_stage_lobby_h_tuto_2_head",
+        "match_type": "Protect",
+        "stage_type": "normal",
+        "myHeroId": "h10001",
+        "enemyHeroId": "qh10002",
+        "map": "normal",
+        "description": "txt_stage_lobby_h_tuto_2_txt",
+        "specialRule": "적 영웅 체력 10",
+        "scripts": [
+            {
+                "Print_text": "",
+                "methods": [
+                    {
+                        "name": "Set_Tutorial",
+                        "args": [ "on" ]
+                    },
+                    {
+                        "name": "Stop_Invoke_NextTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "MULIGAN"
+                        ]
+                    },
+                    {
+                        "name": "Stop_orc_summon",
+                        "args": [
+                            "units",
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "Show_Info_Modal",
+                        "args": [
+                            "block"
+                        ]
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "Disable_EndTurn",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_2_1-7",
+                "methods": [
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_lawmanager",
+                            "txt_ingame_tuto_lawmanager_h02_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_archer",
+                            "txt_ingame_tuto_archer_h02_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_3",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Fill_shield_gage",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_orc_summon",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    },                    
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "ORC"
+                        ]
+                    },
+                    {
+                        "name": "Disable_UnitInfo_Window",
+                        "args": [
+                            "2,0",
+                            "player"
+                        ]
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_2_8",
+                "methods": [
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "HUMAN"
+                        ]
+                    },
+                    {
+                        "name": "Disable_UnitInfo_Window",
+                        "args": [
+                            "0,0",
+                            "enemy"
+                        ]
+                    },
+
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [ "all" ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_4",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Show_Info_Modal",
+                        "args": [
+                            "open"
+                        ]
+                    },
+                    {
+                        "name": "Enable_UnitInfo_Window",
+                        "args": [
+                            "0,0",
+                            "enemy"
+                        ]
+                    },
+                    {
+                        "name": "Highlight_Unit",
+                        "args": [
+                            "ac10011"
+                        ]
+                    },
+                    {
+                        "name": "Wait_Info_Window",
+                        "args": [
+                            "ac10011"
+                        ]
+                    },
+                    {
+                        "name": "StopHighlight",
+                        "args": []
+                    },
+                    {
+                        "name": "Click_Skill_Icon",
+                        "args": [
+                            "ac10011"
+                        ]
+                    },
+                    {
+                        "name": "Focus_Skill_Icon",
+                        "args": [
+                            "ac10011"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_5",
+                            "true",
+                            "maskOff, characterOFF"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_6",
+                            "true",
+                            "maskOff, characterOFF"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Blur_Skill_Icon",
+                        "args": []
+                    },
+                    {
+                        "name": "Enable_UnitInfo_Window",
+                        "args": [
+                            "2,0",
+                            "player"
+                        ]
+                    },
+                    {
+                        "name": "Print_message",
+                        "args": [
+                            "txt_ingame_tuto_info_close_script"
+                        ]
+                    },
+
+                    {
+                        "name": "Unblock_Screen",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Close_Info",
+                        "args": []
+                    },
+                    {
+                        "name": "Show_Info_Modal",
+                        "args": [
+                            "block"
+                        ]
+                    },
+                    {
+                        "name": "Hide_message",
+                        "args": []
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [ "ac10001" ]
+                    },
+                    {
+                        "name": "Wait_summon",
+                        "args": [
+                            "ac10001",
+                            "1"
+                        ]
+                    },
+                    {
+                        "name": "Enable_Deck_card",
+                        "args": []
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_6",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Highlight",
+                        "args": [
+                            "button",
+                            "endTurn"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "button",
+                            "endTurn"
+                        ]
+                    },
+                    {
+                        "name": "StopHighlight",
+                        "args": []
+                    },
+                    {
+                        "name": "ChallengeStart",
+                        "args": [
+                            "MAGIC_USED"
+                        ]
+                    },
+                    {
+                        "name": "Wait_DrawHero",
+                        "args": []
+                    },
+                    {
+                        "name": "Disable_to_hand_herocard",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "BATTLE"
+                        ]
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_2_9-11",
+                "methods": [
+                    {
+                        "name": "Wait_shield_active",
+                        "args": [
+                            "player"
+                        ]
+                    },
+                    {
+                        "name": "Wait_until",
+                        "args": [
+                            "1.1"
+                        ]
+                    },
+                    {
+                        "name": "Till_On",
+                        "args": [
+                        ]
+                    },
+                    {
+                        "name": "Example_Show",
+                        "args": [ "human_5" ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_r1_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "",
+                            "1.2"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_r1_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "",
+                            "1.2"
+                        ]
+                    },
+                    {
+                        "name": "Example_Hide",
+                        "args": []
+                    },
+                    {
+                        "name": "Till_Off",
+                        "args": [
+                        ]
+                    },
+                    {
+                        "name": "Unblock_Screen",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_DrawHero",
+                        "args": []
+                    },
+                    {
+                        "name": "Example_Show",
+                        "args": [
+                            "human_3"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_r1_3",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "",
+                            "1.2"
+                        ]
+                    },
+                    {
+                        "name": "Till_On",
+                        "args": [
+                        ]
+                    },
+                    {
+                        "name": "Disable_drag",
+                        "args": [
+                            "shieldCard",
+                            "exclusive",
+                            "ac10021"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_r1_4",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off",
+                            "1.2"
+                        ]
+                    },
+                    {
+                        "name": "Till_Off",
+                        "args": [
+                        ]
+                    },
+                    {
+                        "name": "Example_Hide",
+                        "args": []
+                    },
+
+                    {
+                        "name": "Force_drop_zone",
+                        "args": [
+                            "magic",
+                            "0"
+                        ]
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_2_12-22",
+                "methods": [
+                    {
+                        "name": "Unblock_Screen",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_drop",
+                        "args": [
+                            "ac10021",
+                            "0"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeEnd",
+                        "args": [
+                            "MAGIC_USED"
+                        ]
+                    },
+                    {
+                        "name": "Line_battle_Finish",
+                        "args": [ "2" ]
+                    },
+                    {
+                        "name": "Socket_Active",
+                        "args": [ "stop" ]
+                    },
+                    {
+                        "name": "Wait_until",
+                        "args": [ "2.5" ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_r1_5",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "Till_On",
+                        "args": [
+                        ]
+                    },
+                    {
+                        "name": "Example_Show",
+                        "args": [ "human_4" ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_r1_6",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off",
+                            "1.2"
+                        ]
+                    },
+                    {
+                        "name": "Example_Hide",
+                        "args": []
+                    },
+                    {
+                        "name": "Till_Off",
+                        "args": []
+                    },
+                    {
+                        "name": "Battle_turn",
+                        "args": [ "proceed" ]
+                    },
+                    {
+                        "name": "Socket_Active",
+                        "args": [ "proceed" ]
+                    },
+                    {
+                        "name": "Disable_EndTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "HUMAN"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_9",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeStart",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [
+                            "ac10008"
+                        ]
+                    },
+
+                    {
+                        "name": "Force_drop_zone",
+                        "args": [
+                            "unit",
+                            "4"
+                        ]
+                    },
+                    {
+                        "name": "Force_UnitSkill_Target",
+                        "args": [ "1" ]
+                    },
+                    {
+                        "name": "Unblock_Screen",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_summon",
+                        "args": [
+                            "ac10008"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeEnd",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "Deactive_TargetHandler",
+                        "args": [
+                            "3,0"
+                        ]
+                    },
+                    {
+                        "name": "StopHighlight",
+                        "args": []
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_10",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Active_TargetHandler",
+                        "args": [
+                            "3,0"
+                        ]
+                    },
+                    {
+                        "name": "Wait_Field_Change",
+                        "args": []
+                    },
+                    {
+                        "name": "Disable_EndTurn",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_2_23",
+                "methods": [
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_11",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Enable_Deck_card",
+                        "args": []
+                    },
+                    {
+                        "name": "Disable_Deck_card",
+                        "args": [ "ac10001" ]
+                    },
+                    {
+                        "name": "Force_drop_zone",
+                        "args": [
+                            "unit",
+                            "3"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeStart",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "Wait_summon",
+                        "args": [
+                            "ac10001"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeEnd",
+                        "args": [
+                            "UNIT_SUMMONED"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_12",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_ingame_tuto_gerald",
+                            "txt_ingame_tuto_gerald_h02_script_13",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name": "Show_Info_Modal",
+                        "args": [
+                            "open"
+                        ]
+                    },
+                    {
+                        "name": "Enable_Deck_card",
+                        "args": []
+                    },
+                    {
+                        "name": "Remove_forced_drop_zone",
+                        "args": []
+                    },
+                    {
+                        "name": "Set_Tutorial",
+                        "args": [ "off" ]
+
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "button",
+                            "endTurn"
+                        ]
+                    },
+                    {
+                        "name": "ChallengeStart",
+                        "args": [
+                            "ENEMY_DEFEAT"
+                        ]
+                    },
+                    {
+                        "name": "Enable_EndTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "StopHighlight",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            },
+            {
+                "Print_text": "data_stage_1031_2_WaitBattle",
+                "methods": [
+                    
+                    {
+                        "name": "Wait_Match_End",
+                        "args": []
+                    },
+                    {
+                        "name": "Result_battle",
+                        "args": [ "stop" ]
+                    },
+                    {
+                        "name": "ChallengeEnd",
+                        "args": [
+                            "ENEMY_DEFEAT"
+                        ]
+                    },
+                    {
+                        "name": "Wait_EnemyDead_Animation",
+                        "args": []
+                    },
+                    {
+                        "name": "Result_battle",
+                        "args": [ "proceed" ]
+                    },
+                    {
+                        "name": "End_tutorial",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            }
+        ],
+        "scenarioReward": [
+            {
+                "reward": "exp",
+                "count": 20
+            },
+            {
+                "reward": "supply",
+                "count": 15
+            },
+            {
+                "reward": "reinforcedBox",
+                "count": 1
+            },
+            {
+                "reward": "goldFree",
+                "count": 25
+            }
+        ],
+        "stageSerial": 3
+    },
+    {
+        "chapter": 1,
+        "chapter_name" : "txt_stage_lobby_h1_chap_head",
+        "require_level" : 1,
+        "stage_number": 1,
+        "stage_Name": "txt_stage_lobby_h1_1_head",
+        "match_type": "story",
+        "stage_type" : "normal",
+        "myHeroId" : "h10001",
+        "enemyHeroId" : "qh10002",
+        "map" : "forest",
+        "description": "txt_stage_lobby_h1_1_txt",
+        "specialRule": "적 영웅의 체력 최대치 20",
+        "scripts": [
+            {
+                "Print_text": "chapter 1-1",
+                "methods": [
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Stop_Invoke_NextTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "MULIGAN"
+                        ]
+                    },
+                    {
+                        "name": "Stop_orc_summon",
+                        "args": [
+                            "units",
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s01_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s01_script_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_orcwarrior",
+                            "txt_stage_in_orcwarrior_h01_s01_script_1",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_orcwarrior",
+                            "txt_stage_in_orcwarrior_h01_s01_script_2",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s01_script_3",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_orcwarrior",
+                            "txt_stage_in_orcwarrior_h01_s01_script_3",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_orcwarrior",
+                            "txt_stage_in_orcwarrior_h01_s01_script_4",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s01_script_4",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Proceed_orc_summon",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            }
+        ],
+        "scenarioReward": [
+            {
+                "reward": "exp",
+                "count": 10
+            },
+            {
+                "reward": "supply",
+                "count": 25
+            }
+        ]
+    },
+    {
+        "chapter": 1,
+        "chapter_name" : "txt_stage_lobby_h2_chap_head",
+        "require_level" : 3,
+        "stage_number": 2,
+        "stage_Name": "txt_stage_lobby_h_tuto_3_head",
+        "match_type": "story",
+        "stage_type" : "normal",
+        "myHeroId" : "h10001",
+        "enemyHeroId" : "qh10002",
+        "map" : "forest",
+        "description": "txt_stage_lobby_o_tuto_2_txt",
+        "specialRule": "적 영웅의 체력 최대치 20",
+        "scripts": [
+            {
+                "Print_text": "chapter 1-2",
+                "methods": [
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Stop_Invoke_NextTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "MULIGAN"
+                        ]
+                    },
+                    {
+                        "name": "Stop_orc_summon",
+                        "args": [
+                            "units",
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_orcwarrior",
+                            "txt_stage_in_orcwarrior_h01_s02_script_2",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "ac10013",
+                            "txt_stage_in_orcshaman_h01_s02_script_1",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "ac10013",
+                            "(주문을 외우는 중)",
+                            "false",
+                            "BlackAurora"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "이 불길한 느낌은...?",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s02_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_orcwarrior",
+                            "txt_stage_in_orcwarrior_h01_s02_script_3",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Proceed_orc_summon",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            }
+        ],
+        "scenarioReward": [
+            {
+                "reward": "exp",
+                "count": 10
+            },
+            {
+                "reward": "supplyBox",
+                "count": 1
+            }
+        ]
+    },
+    {
+        "chapter": 1,
+        "chapter_name" : "txt_stage_lobby_h3_chap_head",
+        "require_level" : 5,
+        "stage_number": 3,
+        "stage_Name": "txt_stage_lobby_h1_3_head",
+        "match_type": "story",
+        "stage_type" : "normal",
+        "myHeroId" : "h10001",
+        "enemyHeroId" : "h10002",
+        "map" : "castle",
+        "description": "txt_stage_lobby_h1_3_txt",
+        "specialRule": "적 영웅의 체력 최대치 20",
+        "scripts": [
+            {
+                "Print_text": "chapter 1-3",
+                "methods": [
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "MULIGAN"
+                        ]
+                    },
+                    {
+                        "name": "Stop_orc_summon",
+                        "args": [
+                            "units",
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s03_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_krakus",
+                            "txt_stage_in_krakus_h01_s03_script_1",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_krakus",
+                            "txt_stage_in_krakus_h01_s03_script_2",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_krakus",
+                            "txt_stage_in_krakus_h01_s03_script_3",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_krakus",
+                            "txt_stage_in_krakus_h01_s03_script_4",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_krakus",
+                            "txt_stage_in_krakus_h01_s03_script_5",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s03_script_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Proceed_orc_summon",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            }
+        ],
+        "scenarioReward": [
+            {
+                "reward": "exp",
+                "count": 10
+            },
+            {
+                "reward": "crystal",
+                "count": 150
+            }
+        ]
+    },
+    {
+        "chapter": 1,
+        "chapter_name" : "txt_stage_lobby_h1_chap_head",
+        "require_level" : 7,
+        "stage_number": 4,
+        "stage_Name": "txt_stage_lobby_h1_4_head",
+        "match_type": "story",
+        "stage_type" : "boss",
+        "myHeroId" : "h10001",
+        "enemyHeroId" : "h10004",
+        "map" : "forest",
+        "description": "txt_stage_lobby_h1_4_txt",
+        "specialRule": "적 영웅의 체력 최대치 30 \n 적 오크 파수꾼 유닛 2개 1/2번 라인에 배치된 상태로 시작 \n 적 자원 2로 시작 \n 10턴동안 생존 목표 \n 10턴 이후 폭발 연출이 일어나며 적군 라인 모든 유닛 제거, 유저 승리",
+        "scripts": [
+            {
+                "Print_text": "chapter 1-4",
+                "methods": [
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Stop_Invoke_NextTurn",
+                        "args": []
+                    },
+                    {
+                        "name": "Wait_Turn",
+                        "args": [
+                            "MULIGAN"
+                        ]
+                    },
+                    {
+                        "name": "Stop_orc_summon",
+                        "args": [
+                            "units",
+                            "all"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s04_script_1",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_bskeleton",
+                            "txt_stage_in_bskeleton_h01_s04_script_1",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_bskeleton",
+                            "txt_stage_in_bskeleton_h01_s04_script_2",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s04_script_2",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_bskeleton",
+                            "txt_stage_in_blueskeleton_h01_s04_script_3",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_gerald",
+                            "txt_stage_in_gerald_h01_s04_script_3",
+                            "true"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen"
+                        ]
+                    },
+                    {
+                        "name": "NPC_Print_message",
+                        "args": [
+                            "txt_stage_in_bskeleton",
+                            "txt_stage_in_bskeleton_h01_s04_script_4",
+                            "false"
+                        ]
+                    },
+                    {
+                        "name": "Wait_click",
+                        "args": [
+                            "screen",
+                            "off"
+                        ]
+                    },
+                    {
+                        "name" : "Unblock_Screen",
+                        "args" : []
+                    },
+                    {
+                        "name": "Proceed_orc_summon",
+                        "args": []
+                    },
+                    {
+                        "name": "Proceed_Invoke_NextTurn",
+                        "args": []
+                    }
+                ],
+                "isExecute": false
+            }
+        ],
+        "scenarioReward": [
+            {
+                "reward": "exp",
+                "count": 20
+            },
+            {
+                "reward": "h10003",
+                "count": 30
+            },
+            {
+                "reward": "crystal",
+                "count": 100
+            }
+        ]
+    }
+]

@@ -1,0 +1,9 @@
+1. 카드를 사용하면 MagicDragHandler.cs 에서 UseSkillCard 함수를 호출한다.
+
+2. ActuveCard.cs 의 Active 함수를 호출하면서 Card 의 고유 ID를 전달
+
+3. 해당 CardID와 이름이 동일한 함수를 호출합니다.
+
+   예) CardID가 ac10006인 카드를 사용하면 ac10006 이름의 함수가 호출됩니다.
+
+해당 CardID에 대한 정규화 파일(seed_data_card_skills.xlsx)을 참고하여 함수들을 정의합니다.

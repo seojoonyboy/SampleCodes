@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: ffbc371b201dd42598e2e095aa5f1695
+timeCreated: 1473058429
+licenseType: Free
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences:
+  - line: {fileID: 11400000, guid: 5b7302396fe8c47b2a2dcd802c4f3d4c, type: 2}
+  - buff: {fileID: 11400000, guid: d8535b59301ca4d529b9e08f423dd6c3, type: 2}
+  - story: {fileID: 11400000, guid: d9061c9dd46a94ba9b0d7af6fc4a6f96, type: 2}
+  - dialogues: {fileID: 11400000, guid: 44c96be39a1df456198dd1aeccb8cafb, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

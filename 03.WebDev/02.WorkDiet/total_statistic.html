@@ -1,0 +1,145 @@
+{% extends "site_monitor/base.html" %}{% load static %}
+{% block body %}
+<div id="wrap" style="min-width:auto">
+    {% include "site_monitor/header.html" %}
+    <div id="container" style="min-width: auto" class="no-sidebar">
+        <div id="content">
+            <div class="total_statistic_header bg">
+                <div class="static-work">
+                    <h3 class="static-work-title">팀을 선택해주세요</h3>
+                    <div class="static-work-query level-{{ lev }}">
+                    <form id="static-form">
+                    {% if lev == 0 %}
+                        <select id="hq-select" title="본부" data-lev="0">
+                            <option value="" class="title" selected disabled hidden>본부</option>
+                            {% for org in orgs %}
+                            <option value="{{ org.org_name }}">{{ org.org_name }}</option>
+                            {% endfor %}
+                        </select>
+                    {% elif lev == 1%}
+                        <select id="factory-select" title="공장" data-lev="1">
+                            <option value="" class="title" selected disabled hidden>공장</option>
+                            {% for org in orgs %}
+                            <option value="{{ org.org_name }}">{{ org.org_name }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endif %}
+                    {% if lev == 2 %}
+                        <select id="department-select" title="실" data-lev="2">
+                            <option value="" class="title" selected disabled hidden>실</option>
+                            {% for org in orgs %}
+                            <option value="{{ org.org_name }}">{{ org.org_name }}</option>
+                            {% endfor %}
+                        </select>
+                    {% else %}
+                        <select id="department-select" title="실" data-lev="2">
+                            <option value="" class="title" selected disabled hidden>실</option>
+                        </select>
+                    {% endif %}
+                        <select id="team-select" title="팀" name="team_id">
+                            <option value="" class="title" selected disabled hidden>팀</option>
+                        </select>
+                        <button class="btn green" type="submit">검색</button>
+                    </form>
+                    </div>
+                </div>
+            </div>
+            <div class="content_spot bg statistic_content">
+                <div class="header">
+                    <h2>{{ result.team.name }}</h2>
+                    <!--<div class="btn green statistic_download">엑셀 파일 다운로드</div>-->
+                </div>
+                <hr>
+                <div class="statistic_info">
+                    <div class="row">
+                        <div class="item">
+                            <h2>팀원 수</h2>
+                            <span class="right_field"><span class="value">{{ result.member_num|default_if_none:0 }}</span>명</span>
+                            <hr>
+                        </div>
+                        <div class="item">
+                            <h2>획득하는 포인트 평균</h2>
+                            <span class="right_field"><span class="value">{{ result.total_points_per_turn|default_if_none:0|floatformat }}</span>/회차</span>
+                            <hr>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="item">
+                            <h2>전체 과제 수행(WA)</h2>
+                            <span class="right_field"><span class="value">{{ result.wa_work_count|default_if_none:0 }}</span>회</span>
+                            <hr>
+                        </div>
+                        <div class="item">
+                            <h2>켐페인 확인 평균</h2>
+                            <span class="right_field"><span class="value">-</span>/회차</span>
+                            <hr>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="item">
+                            <h2>전체 과제 수행(팀원)</h2>
+                            <span class="right_field"><span class="value">{{ result.member_work_count|default_if_none:0 }}</span>회</span>
+                            <hr>
+                        </div>
+                        <div class="item">
+                            <h2>입력하는 과제답변 개수 평균</h2>
+                            <span class="right_field"><span class="value">{{ result.answer_per_turn|default_if_none:0|floatformat }}</span>/회차</span>
+                            <hr>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="item" style="width:100%;">
+                            <h2>포인트</h2>
+                            <span class="right_field"><span class="value">{{ result.total_points }}</span></span>
+                        </div>
+                    </div>
+                    <hr style="width : 100%;">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    <script>
+    var url = '{% url 'monitor_get_selected_list' %}';
+var $option = $('<option>');
+var change_func = function () {
+    var $this = $(this);
+    var level = parseInt($this.data('lev'),10);
+    var name = $this.val();
+    if(name === '없음') return;
+    $('#team-select option').not('.title').remove();
+    $.getJSON(url, {lev:level, name:name},function (data) {
+        var department = [];
+        $.each(data.data,function (i,d) {
+            var opt = $option.clone();
+            opt.val(d.id);
+            opt.text(d.name);
+            $('#team-select').append(opt);
+            department.push(d.department?d.department:'없음');
+        });
+        if(level<2){
+            department = $.unique(department);
+            $('#department-select option').not('.title').remove();
+            $.each(department,function (i,d) {
+                var opt = $option.clone();
+                opt.val(d);
+                opt.text(d);
+                $('#department-select').append(opt);
+            });
+        }
+    });
+};
+$('#department-select').change(change_func);
+
+$('#hq-select').change(change_func);
+
+$('#static-form').submit(function (e) {
+    if (!$('#team-select').val()){
+        e.preventDefault();
+        alert('팀을 선택하셔야 합니다.');
+    }
+});
+
+    </script>
+{% endblock %}
