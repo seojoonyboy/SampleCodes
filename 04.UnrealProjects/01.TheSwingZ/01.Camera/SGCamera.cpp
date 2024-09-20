@@ -3,7 +3,9 @@
 #include "SGBowlerFreeView.h"
 #include "SGGameInstance.h"
 #include "SGCameraMode.h"
+#include "SGCameraRailActor.h"
 #include "SGCourseMode.h"
+#include "SGDataCenter.h"
 #include "SGDrivingMode.h"
 #include "SGPlayerCharacter.h"
 #include "SGGroundChecker.h"
@@ -12,14 +14,19 @@
 #include "SGShotCameraTable.h"
 #include "SGShotDataManager.h"
 #include "SGTableManager.h"
-#include "Kismet/KismetMathLibrary.h"
+#include "SGUserData.h"
+
+#include "EngineUtils.h"
+#include "InstancedFoliageActor.h"
+#include "FoliageInstancedStaticMeshComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Components/ActorComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 
 #define ENABLE_DEBUG_CAMERA
 #define EPSILON 0.00001
+#define ENABLE_OCCLUSION
 
-/**
-*
-*/
 ASGCamera::ASGCamera()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -42,21 +49,22 @@ void ASGCamera::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(TreeHitHandle);
 		GetWorld()->GetTimerManager().ClearTimer(PuttingTraceCameraWaitHandle);
+		GetWorld()->GetTimerManager().ClearTimer(SkyTraceHandle);
 	}
 }
 
 void ASGCamera::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	
+
 	LandingCheck(DeltaTime);
 	
-	// ê³µì„ ì¹˜ë©´ ì¹´ë©”ë¼ ë™ì‘
+	// °øÀ» Ä¡¸é Ä«¸Ş¶ó µ¿ÀÛ
 	if (CanTickCameraWork)
 	{
 		TickCameraWork(DeltaTime);
 	}
-	// ê³µì´ ë©ˆì¶”ë©´ ì¹´ë©”ë¼ ìœ„ì¹˜ ì´ˆê¸°í™”
+	// °øÀÌ ¸ØÃß¸é Ä«¸Ş¶ó À§Ä¡ ÃÊ±âÈ­
 	else
 	{
 		if (IsValid(CurFollowCam) && !IsPenaltyArea)
@@ -108,16 +116,16 @@ void ASGCamera::SpawnCamera()
 		StartFixedCamera->GetSpringArm()->TargetArmLength = 300;
 	}
 
-	GreenCamera = Cast<ASGCameraMode>(GetWorld()->SpawnActor<AActor>(CourseCameraFindClass, FVector::ZeroVector, FRotator::ZeroRotator));
-	if (nullptr != GreenCamera)
+	PuttingFixedCamera = Cast<ASGCameraMode>(GetWorld()->SpawnActor<AActor>(CourseCameraFindClass, FVector::ZeroVector, FRotator::ZeroRotator));
+	if (nullptr != PuttingFixedCamera)
 	{
 #if WITH_EDITOR
-		GreenCamera->SetActorLabel(TEXT("Z_GreenCamera"));
+		PuttingFixedCamera->SetActorLabel(TEXT("Z_GreenCamera"));
 #endif
-		GreenCamera->GetCamera()->SetRelativeLocation(FVector(0, 0, 900));
+		PuttingFixedCamera->GetCamera()->SetRelativeLocation(FVector(0, 0, 900));
 
-		GreenCamera->GetSpringArm()->bDoCollisionTest = false;
-		GreenCamera->GetSpringArm()->TargetArmLength = 450;
+		PuttingFixedCamera->GetSpringArm()->bDoCollisionTest = false;
+		PuttingFixedCamera->GetSpringArm()->TargetArmLength = 450;
 	}
 	
 	SideCamera = Cast<ASGCameraMode>(GetWorld()->SpawnActor<AActor>(CourseCameraFindClass, FVector::ZeroVector, FRotator::ZeroRotator));
@@ -170,12 +178,12 @@ void ASGCamera::SpawnCamera()
 #if WITH_EDITOR
 		PuttingTraceCamera->SetActorLabel(TEXT("Z_PuttingTraceCamera"));
 #endif
-		//í¼íŒ…ìš© ì¹´ë©”ë¼ëŠ” SpringArm ì‚¬ìš©í•˜ì§€ ì•ŠìŒ
+		//ÆÛÆÃ¿ë Ä«¸Ş¶ó´Â SpringArm »ç¿ëÇÏÁö ¾ÊÀ½
 		PuttingTraceCamera->GetSpringArm()->bDoCollisionTest = false;
 		PuttingTraceCamera->GetSpringArm()->SetActive(false);
 		PuttingTraceCamera->GetSpringArm()->bEnableCameraLag = false;
 		PuttingTraceCamera->GetSpringArm()->bEnableCameraRotationLag = false;
-		PuttingTraceCamera->GetSpringArm()->TargetArmLength = 10;
+		PuttingTraceCamera->GetSpringArm()->bUsePawnControlRotation = false;
 	}
 
 	EndShotWaitCamera = Cast<ASGCameraMode>(GetWorld()->SpawnActor<AActor>(CourseCameraFindClass, FVector::ZeroVector, FRotator::ZeroRotator));
@@ -186,6 +194,18 @@ void ASGCamera::SpawnCamera()
 #endif
 		EndShotWaitCamera->GetSpringArm()->Deactivate();
 		EndShotWaitCamera->GetCamera()->FieldOfView = 90;
+	}
+
+	SkyTraceCamera = Cast<ASGCameraMode>(GetWorld()->SpawnActor<AActor>(CourseCameraFindClass, FVector::ZeroVector, FRotator::ZeroRotator));
+	if(nullptr != SkyTraceCamera)
+	{
+#if WITH_EDITOR
+		SkyTraceCamera->SetActorLabel(TEXT("Z_SkyTraceCamera"));
+#endif
+		SkyTraceCamera->GetSpringArm()->Deactivate();
+		SkyTraceCamera->GetSpringArm()->bDoCollisionTest = false;
+		SkyTraceCamera->GetSpringArm()->bEnableCameraLag = false;
+		SkyTraceCamera->GetSpringArm()->bEnableCameraRotationLag = false;
 	}
 }
 
@@ -199,39 +219,44 @@ void ASGCamera::ImpactCameraSetting(ERenderType::Type RenderType, bool mIsTeeSho
 void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
 {
 	IsDecalRequestAvailable = true;
+
+	// GetWorld()->GetTimerManager().SetTimer(FoliageFindTimer, this, &ASGCamera::SetFoliageOpacity, 1.0f, true, 1.0f);
 	
 	IPFinder = Cast<ASGIPFinder>(UGameplayStatics::GetActorOfClass(GetWorld(), ASGIPFinder::StaticClass()));
 	if(IPFinder != nullptr)	{ IPFinder->ResetAllDecalScale(); }
 	
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr == GameInst) return;
+	if (nullptr == PlayerController) return;
+	if (nullptr == PlayerChar) return;
 
-	APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
-	if (nullptr == Controller) return;
+	TraceCamera->GetSpringArm()->SocketOffset = FVector::ZeroVector;
 
-	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(Controller->GetCharacter());
-	if (nullptr == Player) return;
-
-	Player->ClearWaitCameraTimer();
+	PlayerChar->ClearWaitCameraTimer();
 
 	ballPower = GameInst->GetBallSpeed();
 	launchAngle = GameInst->GetLaunchAngle();
 	
 	sideSpinRate = GameInst->GetSideSpinRate();
+	
+	if(ballPower < 2000)
+    {
+    	IsLowApex = true;
+    	IsLowApexInitialized = true;
+    }
 
-	//í˜„ì¬ í™”ë©´ í¬ê¸° ì •ë³´ë¥¼ ê°€ì ¸ì˜¨ë‹¤. [ì—ë””í„°ì—ì„œ ìŠ¤í¬ë¦° ì‚¬ì´ì¦ˆë¥¼ ì¤‘ê°„ì— ë³€ê²½í•  ìˆ˜ ìˆê¸° ë•Œë¬¸ì— Impactì—ì„œ ê°±ì‹ í•œë‹¤.]
+	//ÇöÀç È­¸é Å©±â Á¤º¸¸¦ °¡Á®¿Â´Ù. [¿¡µğÅÍ¿¡¼­ ½ºÅ©¸° »çÀÌÁî¸¦ Áß°£¿¡ º¯°æÇÒ ¼ö ÀÖ±â ¶§¹®¿¡ Impact¿¡¼­ °»½ÅÇÑ´Ù.]
 	{
 		int32 ViewPortSizeX = 1920;
 		int32 ViewPortSizeY = 1080;
-		Controller->GetViewportSize(ViewPortSizeX, ViewPortSizeY);
+		PlayerController->GetViewportSize(ViewPortSizeX, ViewPortSizeY);
 		ScreenSize = FVector2d(ViewPortSizeX, ViewPortSizeY);
 	}
 
-	FVector NormalizeBallForwardVector = Player->GetActorForwardVector().GetSafeNormal();
+	FVector NormalizeBallForwardVector = PlayerChar->GetActorForwardVector().GetSafeNormal();
 	FVector NormalizeBeginForwardVector = BeginForwardDir.GetSafeNormal();
 	float DotProduct = FVector::DotProduct(NormalizeBallForwardVector, NormalizeBeginForwardVector);
 
-	BallForwardVectorAfterImpact = Player->GetActorForwardVector();
+	BallForwardVectorAfterImpact = PlayerChar->GetActorForwardVector();
 	FVector ShiftedCamToBallDirVector = BallForwardVectorAfterImpact.RotateAngleAxis(ShiftRotateAngle, FVector::ZAxisVector);
 	
 	float AngleInRadian = FMath::Acos(FMath::Clamp(DotProduct, -1.0f, 1.0f));
@@ -243,7 +268,7 @@ void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
 		IsLanding = false;
 		IsPutting = false;
 		flyingTime = 0;
-		oldLocation = startLocation = Player->GetActorLocation() - FVector(0, 0, 30); // ì²˜ìŒ ìµœê³ ì  êµ¬í•  ë•ŒëŠ” oldLocationì´ í˜„ì¬ í”Œë ˆì´ì–´ ë†’ì´ë³´ë‹¤ ë‚®ì•„ì•¼í•¨
+		oldLocation = startLocation = PlayerChar->GetActorLocation() - FVector(0, 0, 30); // Ã³À½ ÃÖ°íÁ¡ ±¸ÇÒ ¶§´Â oldLocationÀÌ ÇöÀç ÇÃ·¹ÀÌ¾î ³ôÀÌº¸´Ù ³·¾Æ¾ßÇÔ
 
 		CanTraceCamera = true;
 		CanRotateTraceCamera = true;
@@ -254,12 +279,12 @@ void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
 	{
 		IsDrivingMode = true;
 		if (IsValid(drivingMode->GetTargetActor()))
-			holecupLocation = drivingMode->GetTargetActor()->GetActorLocation(); // í™€ì»µ ìœ„ì¹˜ ì°¾ê¸°
+			holecupLocation = drivingMode->GetTargetActorLocation(drivingMode->GetTargetActor()); // È¦ÄÅ À§Ä¡ Ã£±â
 	}
 	else
 	{
 		IsDrivingMode = false;
-		holecupLocation = Player->CharacterComponent->GetPinPos(); // í™€ì»µ ìœ„ì¹˜ ì°¾ê¸°
+		holecupLocation = PlayerChar->CharacterComponent->GetPinPos(); // È¦ÄÅ À§Ä¡ Ã£±â
 
 		EndShotWaitCameraNeed = true;
 	}
@@ -276,27 +301,52 @@ void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
  		bool IsDebugCameraExist = PHYSICAL_MANAGER->GetCameraOneIndex() != 0;
  		if(IsDebugCameraExist)
  		{
- 			SelectedFirstCameraRecord = GetTargetFirstCameraPriority(1, Player);
+ 			SelectedFirstCameraRecord = GetTargetFirstCameraPriority(1, PlayerChar);
  			BeforeApexCamNum = SelectedFirstCameraRecord != nullptr ?
 				GetBeforeApexCamNumFromStringValue(SelectedFirstCameraRecord->Camera_Result) : 2;
  		}
- 		else { BeforeApexCamNum = 2; }
+ 		else
+ 		{
+ 			if(drivingMode->GetIsPutter()) { BeforeApexCamNum = 0; }
+ 			else { BeforeApexCamNum = 2; }
+ 		}
 #endif
 	}
 	else
 	{
-		SelectedFirstCameraRecord = GetTargetFirstCameraPriority(1, Player);
+		SelectedFirstCameraRecord = GetTargetFirstCameraPriority(1, PlayerChar);
 		BeforeApexCamNum = SelectedFirstCameraRecord != nullptr ?
 			GetBeforeApexCamNumFromStringValue(SelectedFirstCameraRecord->Camera_Result) : 2;
 		
-		SG_LOG(Log, "SJW BeforeApexCamNum : %i", BeforeApexCamNum);
+		// SG_LOG(Log, "SJW BeforeApexCamNum : %i", BeforeApexCamNum);
+
+		CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
+		if(IsValid(CourseMode))
+		{
+			IsDebugSkyTraceState = CourseMode->IsDebugSkyTrace();
+		}
+		
+		if(IsDebugSkyTraceState){ BeforeApexCamNum = 3; }
 		
 		//test code
-		//BeforeApexCamNum = 2;
+		// BeforeApexCamNum = 1;
 		//end test code
 	}
 
-	IsPutting = Player->IsOnApronORGreen() && (PHYSICAL_MANAGER->GetDrivingModeType() == EDrivingModeType::Putter);
+	bool IsTraceCamera = (BeforeApexCamNum == 2) || (BeforeApexCamNum == 3);
+
+#ifdef ENABLE_OCCLUSION
+	bool IsOcclusionEnable = IsTraceCamera;
+	if(OcclusionMPCInstance)
+	{
+		float TargetParValue = IsOcclusionEnable ? 1.0f : 0.0f;
+		OcclusionMPCInstance->SetScalarParameterValue("EnableOcclusion", TargetParValue);
+	}
+#endif
+	
+	PlayerChar->UpdateBallTail(IsTraceCamera);
+
+	IsPutting = PlayerChar->IsOnApronORGreen() && (PHYSICAL_MANAGER->GetDrivingModeType() == EDrivingModeType::Putter);
 	
 	if (IsDrivingMode)
 	{
@@ -305,96 +355,168 @@ void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
 	}
 	else
 	{
+		CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
+
 		if (IsPutting)
 		{
-			SelectedPuttingCameraRecord = GetTargetPuttingCameraRecordByPriority(1, Player);
-			InitPuttingTraceCameraWork(Controller, Player);
+			bool IsDebugPutting = CourseMode->IsDebugPutting();
+			auto DebugSettingMap = CourseMode->GetDebugPuttingSettingData();
+			
+			if(IsValid(CourseMode) && IsDebugPutting)
+			{
+				SelectedPuttingCameraRecord = NewObject<UPuttCameraRecord>();
+
+				int32 CameraResult = DebugSettingMap["CameraResult"];
+				if(CameraResult == 0) {	SelectedPuttingCameraRecord->Camera_Result = "putt_follow";	}
+				else { SelectedPuttingCameraRecord->Camera_Result = "putt_fixed"; }
+				
+				SelectedPuttingCameraRecord->Camera_Active_Rate = 100;
+				SelectedPuttingCameraRecord->Follow_Camera_Distance = DebugSettingMap["Follow_Camera_Distance"];
+				
+				SelectedPuttingCameraRecord->Zoom_Camera_Active = DebugSettingMap["Zoom_Camera_Active"];
+				SelectedPuttingCameraRecord->Zoom_Camera_Active_Distance = DebugSettingMap["Zoom_Camera_Active_Distance"];
+				SelectedPuttingCameraRecord->Zoom_Camera_Ratio = DebugSettingMap["Zoom_Camera_Ratio"];
+
+				SelectedPuttingCameraRecord->Putt_Hole_Fixed = DebugSettingMap["Putt_Hole_Fixed"];
+				SelectedPuttingCameraRecord->Putt_Fixed_Degree = DebugSettingMap["Putt_Fixed_Degree"];
+				SelectedPuttingCameraRecord->Putt_Side_Position = DebugSettingMap["Putt_Side_Position"];
+
+				SelectedPuttingCameraRecord->Putt_Fixed_Height = DebugSettingMap["Putt_Fixed_Height"];
+				SelectedPuttingCameraRecord->Putt_Fixed_Distance = DebugSettingMap["Putt_Fixed_Distance"];
+			}
+			else
+			{
+				SelectedPuttingCameraRecord = GetTargetPuttingCameraRecordByPriority(1, PlayerChar);	
+			}
 
 			//test code
-			//SelectedPuttingCameraRecord = GetTargetPuttingCameraRecordByIndex(10);
+			//SelectedPuttingCameraRecord = GetTargetPuttingCameraRecordByIndex(25);
 			//end test code
 
 			TraceCamera->GetSpringArm()->SocketOffset = FVector(0, 0, 0);
-			TraceCamera->GetSpringArm()->TargetArmLength = Player->GetCameraBoom()->TargetArmLength;
-			TraceCamera->SetActorLocation(Player->GetFollowCamera()->GetComponentLocation());
-			
-			//test code
-			// ASGCourseMode* CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
-			// if(IsValid(CourseMode))
-			// {
-			// 	CourseMode->SpawnDebugBlueBall(predictPuttingPosition);
-			// }
-			//~test code
+			TraceCamera->GetSpringArm()->TargetArmLength = PlayerChar->GetCameraBoom()->TargetArmLength;
+			TraceCamera->SetActorLocation(PlayerChar->GetFollowCamera()->GetComponentLocation());
 			
 			if(IsValid(SelectedPuttingCameraRecord))
 			{
 				FString CameraResultStr = SelectedPuttingCameraRecord->Camera_Result;
 				PuttingCamNum = GetPuttingCamNumFromStringValue(CameraResultStr);
 
-				//test code
-				//PuttingCamNum = 2;
-				//end test code
-				
-				if(PuttingCamNum == 2)
+				if(PuttingCamNum == 1)
 				{
-					FVector BallLocation = Player->GetActorLocation();
-					FVector DirBallToHoleCup = holecupLocation - BallLocation;
-					DirBallToHoleCup.Z = 0;
-					DirBallToHoleCup = DirBallToHoleCup.RotateAngleAxis(-5.0f, FVector::ZAxisVector);
-					DirBallToHoleCup.Normalize();
-
-					float DistOffset = IsValid(SelectedPuttingCameraRecord) ?
-						SelectedPuttingCameraRecord->Putt_Fixed_Distance * 100
-						: 300;
-
-					//test code
-					//DistOffset = 300;
-					//end test code
-
-					FVector NewGreenCamLocation = holecupLocation + DirBallToHoleCup * DistOffset;
-					NewGreenCamLocation.Z = BallLocation.Z + 50;
-					
-					float HeightOffset = IsValid(SelectedPuttingCameraRecord) ?
-						SelectedPuttingCameraRecord->Putt_Fixed_Height * 100
-						: 100;
-
-					//test code
-					//HeightOffset = 150;
-					//end test code
-					
-					NewGreenCamLocation.Z += HeightOffset;
-					// NewGreenCamLocation.Y += 100;
-					
-					GreenCamera->SetActorLocation(NewGreenCamLocation);
-					GreenCamera->GetCamera()->SetWorldLocation(NewGreenCamLocation);
-					// GroundCheck(GreenCamera->GetCamera()->GetComponentLocation(), NewGreenCamLocation);
-
-					FRotator Rot = FRotationMatrix::MakeFromX(Player->GetActorLocation() - GreenCamera->GetCamera()->GetComponentLocation()).Rotator();
-					GreenCamera->SetActorRotation(Rot);
-					
-					GetWorld()->GetTimerManager().SetTimer(PuttingTraceCameraWaitHandle, [this, Controller, Player]() 
-					{
-						Controller->SetViewTarget(GreenCamera);
-					},	0.2f, false, 0);
+					InitPuttingTraceCameraWork(PlayerController, PlayerChar);
+				}
+				else if(PuttingCamNum == 2)
+				{
+					InitPuttingFixedCameraWork(PlayerController, PlayerChar);
 				}
 			}
 		}
+		//Note. ÇÑ¹ø µğ¹ö±× ¼³Á¤ÇÏ¸é ÇØÁ¦ÇÏ´Â ¹æ¹ıÀÌ ¾ø´Âµ¥, ¼¦ÀÌ ³¡³¯ ¶§¸¶´Ù ÃÊ±âÈ­ ÇÏ·Á¸é ÁÖ¼® ÇØÁ¦ ÇÊ¿ä
+		// if(IsValid(CourseMode))	{ CourseMode->IsCameraFOVDebugForced = false; }
 		else
 		{
 			FRotator Rot = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
 			Rot.Pitch = 0;
 			TraceCamera->GetCamera()->SetWorldRotation(Rot);
 		}
+
+		CourseMode->GetWindArrowDirection(WindVector);
 	}
+
+	IsUnder100Shot = GetIsUnder100(PlayerChar, holecupLocation);
 }
 
 
 void ASGCamera::EndShot()
 {
+	GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
+	if(IsValid(GameInst)){ PlayerController = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController()); }
+	if(IsValid(PlayerController)) { PlayerChar = Cast<ASGPlayerCharacter>(PlayerController->GetCharacter()); }
+
+	IsFoliageTimerInitialized = false;
+
+	if(OcclusionMPC)
+	{
+		if(!OcclusionMPCInstance)
+		{
+			OcclusionMPCInstance = GetWorld()->GetParameterCollectionInstance(OcclusionMPC.Get());
+		}
+		if(OcclusionMPCInstance)
+		{
+			OcclusionMPCInstance->SetVectorParameterValue("BallLocation", PlayerChar->GetActorLocation());
+		}
+	}
+
+#ifdef ENABLE_OCCLUSION
+	if(OcclusionMPC)
+	{
+		if(!OcclusionMPCInstance)
+		{
+			OcclusionMPCInstance = GetWorld()->GetParameterCollectionInstance(OcclusionMPC.Get());
+		}
+		if(OcclusionMPCInstance)
+		{
+			OcclusionMPCInstance->SetScalarParameterValue("EnableOcclusion", 1.0f);
+		}
+	}
+#endif
+	
+	if(CameraRailActor != nullptr)
+	{
+		CameraRailActor->EndTrace();
+	}
+
+	if(IsValid(GetWorld()))
+	{
+		GetWorld()->GetTimerManager().ClearTimer(FoliageFindTimer);
+	}
+	
+	LandingTime = 0;
+	ImpactedTime = 0;
+	
+	TargetHorizontalSafeAreaRatio = DefaultTargetHorizontalSafeAreaRatio;
+	IsChangedSafeAreaRatioAfterImpacted = false;
+
+	PrevBallImpacted = false;
+	
+	DistanceAlongSpline = 0;
+
+	IsPredictApexSet = false;
+	IsApexPositionSet = false;
 	IsInitTraceCamera = false;
+	IsTooClosePutting = false;
+	IsTraceCameraPrevAlreadyStopped = false;
+	IsAlreadyAddBezierLandingLine = false;
+	IsAlreadyPauseTrace = false;
+	IsPassedCamBrakePosition = false;
+	IsRemoveCamPointToEndPoint = false;
+	IsPredictGreenLanding = false;
+	IsPuttingZoomCameraSetLocationRotation = false;
+	
+	CanAddLandingPathLine = true;
 	
 	IsUpperOutSafeAreaDetected = false;
 	IsBottomOutSafeAreaDetected = false;
+
+	bIsTraceCameraSocketChangeLerping = true;
+	bIsTraceCameraSocketChangeLerping2 = true;
+	
+	bIsTraceCameraLagChangeLerping = true;
+	bIsTraceCameraLagChangeLerping2 = true;
+	bIsTraceCameraRotateChangeAfterImpactedLerping = true;
+	bIsZoomInLerping = true;
+
+	IsSkyTraceImpactedPathAdded = false;
+
+	TraceCameraLagChangeTime = 0;
+	TraceCameraLagChangeTime2 = 0;
+	
+	TraceCameraSocketChangeTime = 0;
+	TraceCameraRotateTimeChangeAfterImpactedTime = 0;
+	TraceCameraSocketChangeTime2 = 0;
+	SkyTraceCameraDownVectorAfterLandingPassTime = 0;
+	ZoomInPassTime = 0;
 	
 	PuttingPassTime = 0;
 	IsPuttingBallForwardMove = true;
@@ -419,13 +541,17 @@ void ASGCamera::EndShot()
 	traceCameraBreakTime = 0;
 
 	IsBallImpacted = false;
+	IsBallAlmostImpacted = false;
 
 	IsBadImpacted = false;
 	IsHoleIn = false;
-	
-	IsPuttingZoomCameraSetLocationRotation = false;
 
 	IsPutting = false;
+
+	IsLowApexInitialized = false;
+	IsLowApex = false;
+
+	SkyTraceDescendVelocityRatio = 1.0f;
 	
 	if(!IsDrivingMode && IsValid(IPFinder))
 	{ 
@@ -434,11 +560,13 @@ void ASGCamera::EndShot()
 	
 	InitCameraLag();
 	InitCameraRelativeRotation();
+	TraceCamera->GetSpringArm()->TargetArmLength = 300;
 	TraceCamera->GetSpringArm()->CameraLagSpeed = 1;
 	TraceCamera->GetSpringArm()->SocketOffset = FVector(0, 0, 100);
-	TraceCamera->GetCamera()->SetRelativeLocation(FVector(0, 0, 100));
-	
-	PuttingZoomCamera->GetCamera()->FieldOfView = 80;
+	TraceCamera->GetCamera()->SetRelativeLocation(FVector::ZeroVector);
+
+	SkyTraceStopDist = 700;
+	SkyTraceLowApexStopDist = 700;
 
 	if(ShiftRotateAngle == 0)
 	{
@@ -446,25 +574,26 @@ void ASGCamera::EndShot()
 	}
 	else
 	{
-		int dir = ShiftRotateAngle > 0 ? 1 : -1;
 		TraceCamera->GetSpringArm()->SetRelativeRotation(FRotator(0, -1 * ShiftRotateAngle, 0));	
 	}
+
+	PuttingZoomCamera->GetCamera()->FieldOfView = 80;
 	
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
+	GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr != GameInst)
 	{
-		APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
-		if (nullptr != Controller)
+		PlayerController = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
+		if (nullptr != PlayerController)
 		{
-			ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(Controller->GetPawn());
-			if (nullptr != Player)
+			PlayerChar = Cast<ASGPlayerCharacter>(PlayerController->GetPawn());
+			if (nullptr != PlayerChar)
 			{
-				Controller->SetViewTarget(Player->GetFollowCamera()->GetOwner());
+				PlayerController->SetViewTarget(PlayerChar->GetFollowCamera()->GetOwner());
 
-				FVector PlayerLocation = Player->GetActorLocation();
+				FVector PlayerLocation = PlayerChar->GetActorLocation();
 				StartFixedCamera->SetActorLocation(PlayerLocation);
 
-				FVector BallToTraceCameraVector = Player->GetActorLocation() - TraceCamera->GetCamera()->GetComponentLocation();
+				FVector BallToTraceCameraVector = PlayerChar->GetActorLocation() - TraceCamera->GetCamera()->GetComponentLocation();
 				FVector LeftVector = BallToTraceCameraVector.RotateAngleAxis(-90, FVector::ZAxisVector).GetSafeNormal();
 				LeftVector.Z = 0;
 				LeftVector *= ShiftLeftAmount;
@@ -475,30 +604,45 @@ void ASGCamera::EndShot()
 				
 				BadPlaceHitFixedCamera->SetActorLocation(PlayerLocation);
 
-				BeginForwardDir = Player->GetActorForwardVector();
+				BeginForwardDir = PlayerChar->GetActorForwardVector();
 
-				Player->GetCameraBoom()->SocketOffset = FVector(0, 0, 100);
-				Player->GetCameraBoom()->SetRelativeLocation(FVector::ZeroVector);
-				Player->GetFollowCamera()->SetRelativeLocation(FVector::ZeroVector);
+				PlayerChar->GetCameraBoom()->SocketOffset = FVector(0, 0, 100);
+				PlayerChar->GetCameraBoom()->SetRelativeLocation(FVector::ZeroVector);
+				PlayerChar->GetFollowCamera()->SetRelativeLocation(FVector::ZeroVector);
 				
-				Player->UpdateCameraFieldOfView();
+				PlayerChar->UpdateCameraFieldOfView();
 				
-				Player->GetFollowCamera()->SetRelativeRotation(FRotator(2, 0, 0));
+				PlayerChar->GetFollowCamera()->SetRelativeRotation(FRotator(2, 0, 0));
 			}
 		}
+	}
+
+	CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
+	if(IsValid(CourseMode))
+	{
+		CourseMode->ClearDebugPuttingState();
 	}
 }
 
 void ASGCamera::TickCameraWork(float DeltaTime)
 {
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr == GameInst) return;
+	if (nullptr == PlayerController) return;
 
-	APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
-	if (nullptr == Controller) return;
-
-	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(Controller->GetPawn());
+	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(PlayerController->GetPawn());
 	if (nullptr == Player) return;
+
+	if(OcclusionMPC)
+	{
+		if(!OcclusionMPCInstance)
+		{
+			OcclusionMPCInstance = GetWorld()->GetParameterCollectionInstance(OcclusionMPC.Get());
+		}
+		if(OcclusionMPCInstance)
+		{
+			OcclusionMPCInstance->SetVectorParameterValue("BallLocation", Player->GetActorLocation());
+		}
+	}
 
 	Player->TraceCameraLastLocation = TraceCamera->GetActorLocation();
 
@@ -508,23 +652,22 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 		{
 			if(Player->GetLastHitSurface() == SurfaceType14)
 			{
-				FVector BeforeBallForwardVector = Player->GetActorForwardVector().GetSafeNormal();
-				GetWorld()->GetTimerManager().SetTimer(TreeHitHandle, [this, Player, BeforeBallForwardVector]()
-				{
-					FVector CurrentBallForwardVector = Player->GetActorForwardVector().GetSafeNormal();
-					float DotProduct = FVector::DotProduct(BeforeBallForwardVector, CurrentBallForwardVector);
-					float AngleInRadian = FMath::Acos(FMath::Clamp(DotProduct, -1.0f, 1.0f));
-					
-					float Degree = FMath::RadiansToDegrees(AngleInRadian);
-					SG_LOG(Log, "Tree hit After Degree %f", Degree);
+				// FVector BeforeBallForwardVector = Player->GetActorForwardVector().GetSafeNormal();
+				// FVector CurrentBallForwardVector = Player->GetActorForwardVector().GetSafeNormal();
+				//
+				// float DotProduct = FVector::DotProduct(BeforeBallForwardVector, CurrentBallForwardVector);
+				// float AngleInRadian = FMath::Acos(FMath::Clamp(DotProduct, -1.0f, 1.0f));
+				// 	
+				// float Degree = FMath::RadiansToDegrees(AngleInRadian);
+				// SG_LOG(Log, "Tree hit After Degree %f", Degree);
+				//
+				// if((Degree > 15) && Player->GetFlyingCheck())
+				// {
+				// 	SG_LOG(Log, "SJW Hit BadPlace");
+				// 	IsHitBadPlace = true;
+				// }
 
-					if((Degree > 15) && Player->GetFlyingCheck())
-					{
-						SG_LOG(Log, "SJW Hit BadPlace");
-						IsHitBadPlace = true;
-					}
-					
-				}, 30.0f, false, 0.5f);
+				IsHitBadPlace = true;
 			}
 		}
 	}
@@ -536,7 +679,7 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 		return;
 	}
 
-	// OB ê²€ì‚¬
+	// OB °Ë»ç
 	if (!Player->GetBallMoving() && Player->GetShotArrivalCondition() == EShotJudgeArrival::OB)
 	{
 		CanTickCameraWork = false;
@@ -544,48 +687,38 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 		return;
 	}
 
-	// í¼íŒ… ì¹´ë©”ë¼ (ê·¸ë¦° ì§€ì—­ì—ì„œë§Œ)
+	// ÆÛÆÃ Ä«¸Ş¶ó (±×¸° Áö¿ª¿¡¼­¸¸)
 	if (IsPutting)
 	{
 		// SG_LOG(Log, "PuttingCamNum %i", PuttingCamNum);
 		UPuttCameraRecord* ResultRecord = SelectedPuttingCameraRecord;
 
 		//test code
-		// ResultRecord = GetTargetPuttingCameraRecordByIndex(9);
+		// ResultRecord = GetTargetPuttingCameraRecordByIndex(7);
 		// PuttingCamNum = 1;
 		//end test code
 
 		float BallToHoleCupDist = FVector::Dist2D(Player->GetActorLocation(), holecupLocation);
-		
-		//ì—­ë°©í–¥ ì¹´ë©”ë¼
+
+		//ÆÛÆÃ °íÁ¤ Ä«¸Ş¶ó
 		if (PuttingCamNum == 2)
 		{
-			// float CamToBallDist = FVector::Dist(
-			// 	Player->GetActorLocation(),
-			// 	GreenCamera->GetCamera()->GetComponentLocation()
-			// );
-
 			if(BallToHoleCupDist > SG_HOLE_CUP_DIAMETER)
 			{
-				FVector LookTarget = Player->GetActorLocation() - GreenCamera->GetCamera()->GetComponentLocation();
-				FRotator Rot = FRotationMatrix::MakeFromX(LookTarget).Rotator();
-				GreenCamera->GetCamera()->SetWorldRotation(Rot);
+				PuttingFixedCameraWork(PlayerController, Player, DeltaTime);
 			}
 		}
-		// ì¶”ì  ì¹´ë©”ë¼ (ì •ë°©í–¥)
+		// ÃßÀû Ä«¸Ş¶ó (Á¤¹æÇâ)
 		else
 		{
-			// SG_LOG(Log, "SJW 555 BallToHoleCupDist %f", BallToHoleCupDist);
-			// SG_LOG(Log, "SJW 555 Player->GetVelocity().Z %f", Player->GetVelocity().Z);
-			
-			if(BallToHoleCupDist < 8)
+			if(BallToHoleCupDist < SG_HOLE_CUP_RADIUS)
 			{
 				// SG_LOG(Log, "SJW 555 GetLastShotArrivalCondition hole in");
 				
 				Player->GetCameraBoom()->CameraLagSpeed = 100;
 
-				//Note. ê³µì´ í™€ì— ë“¤ì–´ê°€ëŠ” ê²½ìš° SpringArmì— ì˜í•´ Follow Cameraê°€ ê°•ì œë¡œ ê³µì— ë¶™ì–´ í™€ ì•ˆìœ¼ë¡œ ë“¤ì–´ê°€ëŠ” ê²½ìš°ë¥¼
-				//ë§‰ê¸° ìœ„í•´, SrpingArm ì„ í™€ì»µì— ë“¤ì–´ê°ˆ ê²ƒì´ ì˜ˆì¸¡ë˜ëŠ” ê²½ìš° ê°•ì œë¡œ ì‚´ì§ ì˜¬ë ¤ì¤€ë‹¤.
+				//Note. °øÀÌ È¦¿¡ µé¾î°¡´Â °æ¿ì SpringArm¿¡ ÀÇÇØ Follow Camera°¡ °­Á¦·Î °ø¿¡ ºÙ¾î È¦ ¾ÈÀ¸·Î µé¾î°¡´Â °æ¿ì¸¦
+				//¸·±â À§ÇØ, SrpingArm À» È¦ÄÅ¿¡ µé¾î°¥ °ÍÀÌ ¿¹ÃøµÇ´Â °æ¿ì °­Á¦·Î »ìÂ¦ ¿Ã·ÁÁØ´Ù.
 				Player->GetCameraBoom()->SetRelativeLocation(FVector(0, 0, 50));
 				
 				CanTraceCamera = false;
@@ -593,8 +726,8 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 			}
 			else
 			{
-				//ì†ë„ê°€ ì–´ëŠì •ë„ ìˆê³ , ì—­ë°©í–¥ìœ¼ë¡œ ëŒì•„ì˜¤ê³  ìˆê³ , ì–´ëŠì •ë„ í™€ì»µì—ì„œ ë©€ì–´ì§„ ê²½ìš°
-				if(IsHoleIn && (BallToHoleCupDist > 50))
+				//¼Óµµ°¡ ¾î´ÀÁ¤µµ ÀÖ°í, ¿ª¹æÇâÀ¸·Î µ¹¾Æ¿À°í ÀÖ°í, ¾î´ÀÁ¤µµ È¦ÄÅ¿¡¼­ ¸Ö¾îÁø °æ¿ì
+				if(IsHoleIn && (BallToHoleCupDist > 10))
 				{
 					SG_LOG(Log, "SJW 666 Move after Hole hit!!!");
 					
@@ -610,9 +743,13 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 				if(ZoomCameraActiveCond == 1)
 				{
 					int32 ZoomCameraActiveDist = ResultRecord->Zoom_Camera_Active_Distance * 100;
+					//test code
+					// ZoomCameraActiveDist = 200;
+					//end test code
+					
 					if(BallToHoleCupDist <= ZoomCameraActiveDist)
 					{
-						PuttingZoomCameraWork(Controller, Player);
+						PuttingZoomCameraWork(PlayerController, Player, DeltaTime);
 						CanTraceCamera = false;
 					}
 				}
@@ -649,8 +786,7 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 					TraceCamera->GetSpringArm()->bEnableCameraRotationLag = false;
 			}
 
-			TraceCameraWork(Controller, Player, DeltaTime);
-			PuttingZoomCamera->SetActorLocation(TraceCamera->GetActorLocation());
+			TraceCameraWork(PlayerController, Player, DeltaTime);
 			
 			if(CanRotateTraceCamera && IsPutting)
 			{
@@ -662,31 +798,80 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 			}
 		}
 	}
-	// ê¸°ë³¸ ì¹´ë©”ë¼ (ê·¸ë¦° ì§€ì—­ì´ ì•„ë‹Œ ê³³ ì „ë¶€)
+	// ±âº» Ä«¸Ş¶ó (±×¸° Áö¿ªÀÌ ¾Æ´Ñ °÷ ÀüºÎ)
 	else
 	{
 		flyingTime += DeltaTime;
 
-		if(IsLanding && !Player->GetFlyingCheck() && !IsBallImpacted)
+		if(flyingTime >= 0.2f && !IsPredictApexSet)
 		{
-			SG_LOG(Log, "SJW 333 Ball Impacted ground...");
-			BallImpactedPosition = Player->GetActorLocation();
-			TraceCameraPrevLocationAfterBallImpacted = TraceCamera->GetCamera()->GetComponentLocation();
-			IsBallImpacted = true;
+			PredictApexPosition(Player->GetActorLocation(), Player->GetVelocity(), Player->GetMagnusVector());
+			if(IsValid(CameraRailActor))
+			{
+				CameraRailActor->UpdatePredictedApex(predictApexPosition);
+			}
+
+			float DiffGroundFixToApex = FMath::Abs(predictApexPosition.Z - startLocation.Z);
+			IsApexUnderGroundFix = DiffGroundFixToApex < NoneGreenTrailLimitHeight;
+			
+			IsPredictApexSet = true;
+		}
+		
+		if(IsLanding){
+			if(!IsApexPositionSet) { apexPosition = Player->GetActorLocation();	}
+			IsApexPositionSet = true;
+		}
+
+		if(IsLanding && !IsBallImpacted) { LandingTime += DeltaTime; }
+		
+		if(IsLanding && !IsLowApexInitialized){
+			float BallZPos = Player->GetActorLocation().Z;
+			float DiffZBallToStartPosZ = FMath::Abs(BallZPos - startLocation.Z);
+			IsLowApex = DiffZBallToStartPosZ < 1000.0f;
+		
+			IsLowApexInitialized = true;
+
+			SG_LOG(Log, "DiffZBallToStartPosZ %f", DiffZBallToStartPosZ);
+			if(!IsLowApex){ SG_LOG(Log, "IsLow Apex is False"); }
+			else{ SG_LOG(Log, "IsLow Apex is True"); }
+		}
+		
+		if(IsLanding && !Player->GetFlyingCheck())
+		{
+			// SG_LOG(Log, "SJW [000] Ball Impacted ground...");
+
+			if(!PrevBallImpacted)
+			{
+				BallImpactedPosition = Player->GetActorLocation();
+				BallVelocityBeforeImpacted = Player->GetVelocity();
+				IsBallImpacted = true;
+				PrevBallImpacted = true;
+			}
+
+			ImpactedTime += DeltaTime;
+		}
+
+		if(IsLanding && IsCloseToGround(Player, 200))
+		{
+			if(!IsBallAlmostImpacted)
+			{
+				TraceCameraPrevLocationAfterBallImpacted = TraceCamera->GetCamera()->GetComponentLocation();
+				IsBallAlmostImpacted = true;
+			}
 		}
 
 		if(IsHitBadPlace)
 		{
-			AfterApexCamNum = 5;
-			IsAfterApexCamNumDecided = true;
-			InitBadPlaceHitCameraWork(Controller, Player);
-			
-			CameraStep = 1;
+			// AfterApexCamNum = 3;
+			// IsAfterApexCamNumDecided = true;
+			// InitBadPlaceHitCameraWork(Controller, Player);
+			//
+			// CameraStep = 1;
 		}
 		
 		if(CameraStep == 0)
 		{
-			//APEXë¥¼ ì§€ë‚¬ì„ ë•Œ, 2ì°¨ ì¹´ë©”ë¼ë¡œ ì „í™˜í•œë‹¤.
+			//APEX¸¦ Áö³µÀ» ¶§, 2Â÷ Ä«¸Ş¶ó·Î ÀüÈ¯ÇÑ´Ù.
 			if(IsLanding)
 			{
 				IsAfterApexCamNumDecided = false;
@@ -698,27 +883,41 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 			{
 				switch (BeforeApexCamNum)
 				{
-				//ê¸°ë³¸ ì‹œì‘ ê³ ì • ì¹´ë©”ë¼
+				//½ÃÀÛ °íÁ¤ Ä«¸Ş¶ó [È¸Àüx]	
+				case 0:
+					FixedCameraWithNoRotateWork(Player);
+					break;
+				//±âº» ½ÃÀÛ °íÁ¤ Ä«¸Ş¶ó
 				case 1:
 					FixedCameraWork(Player);
 					break;
 
-				//(ì •ë°©í–¥) ì¶”ì  ì¹´ë©”ë¼	
+				//(Á¤¹æÇâ) ÃßÀû Ä«¸Ş¶ó	
 				case 2:
-					TraceCameraWork(Controller, Player,	DeltaTime);
+					TraceCameraWork(PlayerController, Player,	DeltaTime);
 					break;
+
+				case 3:
+					SkyTraceCameraWork(PlayerController, Player, DeltaTime);
 				}
 			}
 			else
 			{
 				switch (BeforeApexCamNum)
 				{
+				case 0:
+					InitFixedCameraWithNoRotateWork(PlayerController, Player);
+					break;
 				case 1:
-					InitFixedCameraWork(Controller, Player);
+					InitFixedCameraWork(PlayerController, Player);
 					break;
 
 				case 2:
-					InitTraceCameraWork(Controller, Player);
+					InitTraceCameraWork(PlayerController, Player);
+					break;
+
+				case 3:
+					InitSkyTraceCameraWork(PlayerController, Player);
 					break;
 				}
 
@@ -726,8 +925,8 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 			}
 		}
 		else if(CameraStep == 1)
-		{ 
-			//ì´ë¯¸ ì¹´ë©”ë¼ ìœ í˜•ì´ ê²°ì •ëœ ê²½ìš°
+		{
+			//ÀÌ¹Ì Ä«¸Ş¶ó À¯ÇüÀÌ °áÁ¤µÈ °æ¿ì
 			if(IsAfterApexCamNumDecided)
 			{
 				float SideCameraRemainHeightCM = 0;
@@ -735,12 +934,12 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 				
 				switch (AfterApexCamNum)
 				{
-				//(ì—­ë°©í–¥) ì§€ë©´ ê³ ì • ì¹´ë©”ë¼
+				//(¿ª¹æÇâ) Áö¸é °íÁ¤ Ä«¸Ş¶ó
 				case 1:
-					ReverseFixedCameraWork(Controller, Player);
+					ReverseFixedCameraWork(PlayerController, Player);
 					break;
 					
-				//ì¸¡ë©´ ì¹´ë©”ë¼
+				//Ãø¸é Ä«¸Ş¶ó
 				case 2:
 					if(FlagCameraToReverseCamera)
 					{
@@ -748,7 +947,7 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 					}
 					
 					{
-						if(IsLanding && IsAvailableThirdCamera(Controller, Player) && !IsHitBadPlace)
+						if(IsLanding && IsAvailableThirdCamera(PlayerController, Player) && !IsHitBadPlace)
 						{
 #ifdef ENABLE_DEBUG_CAMERA
 							int DebugThirdCameraIndex = PHYSICAL_MANAGER->GetCameraThreeIndex();
@@ -759,8 +958,8 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 								
 								AfterApexCamNum = 1;
 
-								InitReverseFixedCameraWork(Controller, Player->GetActorLocation());
-								ReverseFixedCameraWork(Controller, Player);
+								InitReverseFixedCameraWork(PlayerController, Player->GetActorLocation());
+								ReverseFixedCameraWork(PlayerController, Player);
 
 								return;
 							}
@@ -774,20 +973,20 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 							
 									if(!IsPredictWrongLandingZone())
 									{
-										SG_LOG(Log, "SJW 002 Reverse Fixed Camera!!!!");
+										// SG_LOG(Log, "SJW 002 Reverse Fixed Camera!!!!");
 								
 										AfterApexCamNum = 1;
 
-										InitReverseFixedCameraWork(Controller, Player->GetActorLocation());
-										ReverseFixedCameraWork(Controller, Player);
+										InitReverseFixedCameraWork(PlayerController, Player->GetActorLocation());
+										ReverseFixedCameraWork(PlayerController, Player);
 									}
 								}
 								else if(SelectedSecondCameraRecord->Third_Camera_Result == "shot_follow")
 								{
 									AfterApexCamNum = 3;
 									
-									InitTraceCameraWork(Controller, Player);
-									TraceCameraWork(Controller, Player, DeltaTime);
+									InitTraceCameraWork(PlayerController, Player);
+									TraceCameraWork(PlayerController, Player, DeltaTime);
 								}
 							}
 							
@@ -797,12 +996,12 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 					SideCameraWork(Player);
 					break;
 					
-				//(ì •ë°©í–¥) ì¶”ì  ì¹´ë©”ë¼
+				//(Á¤¹æÇâ) ÃßÀû Ä«¸Ş¶ó
 				case 3:
-					TraceCameraWork(Controller, Player, DeltaTime);
+					TraceCameraWork(PlayerController, Player, DeltaTime);
 					break;
 
-				//ì¸¡ë©´ 45ë„ ì¹´ë©”ë¼ (êµ¬. ì‚¬ì´ë“œ ì¹´ë©”ë¼)
+				//Ãø¸é 45µµ Ä«¸Ş¶ó (±¸. »çÀÌµå Ä«¸Ş¶ó)
 				case 4:
 					{
 						if(IsLanding && IsCloseToGround(Player, SideCameraRemainHeightCM) && !IsPredictWrongLandingZone())
@@ -810,18 +1009,29 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 							SG_LOG(Log, "SJW 002 Reverse Fixed Camera!!!!");
 							AfterApexCamNum = 1;
 							
-							InitReverseFixedCameraWork(Controller, Player->GetActorLocation());
-							ReverseFixedCameraWork(Controller, Player);
+							InitReverseFixedCameraWork(PlayerController, Player->GetActorLocation());
+							ReverseFixedCameraWork(PlayerController, Player);
 							return;
 						}
 					}
-				//ì˜ëª» ë¶€ë”ªí˜”ì„ ë•Œ (ì˜ˆ. ë‚˜ë¬´) ì˜ˆì™¸ì²˜ë¦¬ ì¹´ë©”ë¼
+				//Àß¸ø ºÎµúÇûÀ» ¶§ (¿¹. ³ª¹«) ¿¹¿ÜÃ³¸® Ä«¸Ş¶ó
 				case 5:
 					{
 						// SG_LOG(Log, "SJW 002 BadPlaceHit Camera Active");
 						BadPlaceHitCameraWork(Player);
 					}
 					break;
+
+				case 6:
+					{
+						SkyTraceCameraWork(PlayerController, Player, DeltaTime);
+					}
+					break;
+
+				case 7:
+					{
+						FixedCameraWork(Player);
+					}
 				}
 			}
 			else
@@ -836,31 +1046,50 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 					{
 						DecideAfterCamNum();
 					}
-					else{ AfterApexCamNum = 3; }
+					else
+					{
+						if(BeforeApexCamNum == 0) { AfterApexCamNum = -1; }
+						else { AfterApexCamNum = 3; }
+					}
 				}
+
+				if(IsDebugSkyTraceState){ AfterApexCamNum = 6; }
+				
+				//test code
+				// AfterApexCamNum = 2;
+				//end test code
 #endif
 				
 				switch (AfterApexCamNum)
 				{
 				case 1:
-					InitReverseFixedCameraWork(Controller, Player->GetActorLocation());
+					InitReverseFixedCameraWork(PlayerController, Player->GetActorLocation());
 					break;
 
 				case 2:
 					sideCameraBeginTime = flyingTime;
-					InitSideCameraWork(Controller, Player);
+					InitSideCameraWork(PlayerController, Player);
 					break;
 
 				case 3:
-					InitTraceCameraWork(Controller, Player);
+					InitTraceCameraWork(PlayerController, Player);
 					break;
 
 				case 4:
-					InitSideBellowCameraWork(Controller, Player);
+					InitSideBellowCameraWork(PlayerController, Player);
 					break;
 
 				case 5:
-					InitBadPlaceHitCameraWork(Controller, Player);
+					InitBadPlaceHitCameraWork(PlayerController, Player);
+					break;
+
+				case 6:
+					InitSkyTraceCameraWork(PlayerController, Player);
+					break;
+					
+				case 7:
+					//ÀÌ¹Ì ½ÃÀÛ °íÁ¤ÀÎ °æ¿ì È£ÃâÇÏÁö ¾Ê´Â´Ù.
+					if(BeforeApexCamNum != 1) InitFixedCameraWork(PlayerController, Player);
 					break;
 				}
 
@@ -868,32 +1097,36 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 			}
 		}
 	}
+
+	if (false == Player->GetBallMoving())
+	{
+		CanTickCameraWork = false;
+
+		if (AfterApexCamNum != 6)
+		{
+			ActiveEndShotWaitCamera();
+		}
+	}
 }
 
-//AfterApexCamNumì„ ê²°ì •í•œë‹¤.
+//AfterApexCamNumÀ» °áÁ¤ÇÑ´Ù.
 void ASGCamera::DecideAfterCamNum()
 {
 	AfterApexCamNum = -1;
 	
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr == GameInst) return;
+	if (nullptr == PlayerController) return;
+	if (nullptr == PlayerChar) return;
 
-	APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
-	if (nullptr == Controller) return;
+	CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
 
-	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(Controller->GetPawn());
-	if (nullptr == Player) return;
-
-	ASGCourseMode* CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
-
-	FVector BallLocation = Player->GetActorLocation();
-	FVector BallVelocity = Player->GetVelocity();
-	FVector BowlerFreeViewLastPosition = Player->GetBowlerFreeView()->GetLastLocation();
-	FVector MagnusVector = Player->GetTotalMagnusVector();
+	FVector BallLocation = PlayerChar->GetActorLocation();
+	FVector BallVelocity = PlayerChar->GetVelocity();
+	FVector BowlerFreeViewLastPosition = PlayerChar->GetBowlerFreeView()->GetLastLocation();
+	FVector MagnusVector = PlayerChar->GetTotalMagnusVector();
 
 	if(IsHitBadPlace) {	AfterApexCamNum = 5; }
 	
-	float WindPower = 0;
 	float OutWindDirection = 0;
 	float windforcePowerRatio = 1.923937;
 	FVector WindArrowDirection = FVector::ZeroVector;
@@ -906,86 +1139,129 @@ void ASGCamera::DecideAfterCamNum()
 	
 	float playerMass = 0.045930f;
 
-	if (Player->GetCapsuleComponent()->IsSimulatingPhysics() == true)
+	if (PlayerChar->GetCapsuleComponent()->IsSimulatingPhysics() == true)
 	{
-		playerMass = Player->GetCapsuleComponent()->GetMass();
+		playerMass = PlayerChar->GetCapsuleComponent()->GetMass();
 	}
 
 	FVector TargetWindForceVector = playerMass * (WindPower * 100.0f * windforcePowerRatio) * WindArrowDirection * 0.2f;
 
-	float dotProduct = FVector::DotProduct(Player->GetVelocity(), TargetWindForceVector);
+	float dotProduct = FVector::DotProduct(PlayerChar->GetVelocity(), TargetWindForceVector);
 	if (dotProduct > 0)
 	{
-		// ìˆœí’
-		TargetWindForceVector *= 0.5f;		// ìˆœí’ì€ ì—­í’ ì˜í–¥ì˜ ì ˆë°˜
+		// ¼øÇ³
+		TargetWindForceVector *= 0.5f;		// ¼øÇ³Àº ¿ªÇ³ ¿µÇâÀÇ Àı¹İ
 	}
 
-	//ì˜ˆìƒ ë‚™êµ¬ ì§€ì  ì—°ì‚°
-	PredictLandingPosition(BallLocation, BallVelocity, MagnusVector, BowlerFreeViewLastPosition, TargetWindForceVector, Player->GetMagnusForceCount());
+	//¿¹»ó ³«±¸ ÁöÁ¡ ¿¬»ê
+	PredictLandingPosition(BallLocation, BallVelocity, MagnusVector, BowlerFreeViewLastPosition, TargetWindForceVector, PlayerChar->GetMagnusForceCount());
 
-	SelectedSecondCameraRecord = GetTargetSecondCameraPriority(1, Player);
+	SelectedSecondCameraRecord = GetTargetSecondCameraPriority(1, PlayerChar);
 	if(IsValid(SelectedSecondCameraRecord))
 	{
 		AfterApexCamNum = GetAfterApexCamNumFromStringValue(SelectedSecondCameraRecord->Camera_Result);
 	}
+	bool IsTraceCamera = (AfterApexCamNum == 3) || (AfterApexCamNum == 6);
+	PlayerChar->UpdateBallTail(IsTraceCamera);
+
+#ifdef ENABLE_OCCLUSION
+	bool IsOcclusionEnable = IsTraceCamera || (AfterApexCamNum == 1);
+	if(OcclusionMPCInstance)
+	{
+		float TargetParValue = IsOcclusionEnable ? 1.0f : 0.0f; 
+		if(IsOcclusionEnable)
+		{
+			OcclusionMPCInstance->SetScalarParameterValue("EnableOcclusion", TargetParValue);
+		}
+	}
+#endif
+
+	IsFoliageTimerInitialized = true;
 }
 
-
-void ASGCamera::InitFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
+void ASGCamera::InitFixedCameraWithNoRotateWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
+	StartFixedCamera->SetActorLocation(Player->GetActorLocation());
+	
+	StartFixedCamera->GetSpringArm()->SocketOffset = FVector(0, 0, 100);
+
+	StartFixedCamera->GetCamera()->SetRelativeLocation(FVector::ZeroVector);
+	StartFixedCamera->GetCamera()->SetRelativeRotation(FRotator::ZeroRotator);
 	StartFixedCamera->GetCamera()->FieldOfView = Player->GetFollowCamera()->FieldOfView;
 	
-	FVector CameraLocation = Player->GetActorLocation();
-	StartFixedCamZPosFix(CameraLocation);
-
-	StartFixedCamera->GetSpringArm()->SetRelativeRotation(FRotator(0, -1 * ShiftRotateAngle, 0));
-	StartFixedCamera->SetActorLocation(CameraLocation);
-
-	FVector CamToLookVector = Player->GetActorLocation() - StartFixedCamera->GetCamera()->GetComponentLocation();
-	FVector ShiftedCamToLookVector = CamToLookVector.RotateAngleAxis(ShiftRotateAngle, FVector::ZAxisVector);
-	ShiftedCamToLookVector.Z = 0;
-	
-	FRotator CurrentRotation = StartFixedCamera->GetCamera()->GetComponentRotation();
-	FRotator Rot = FRotationMatrix::MakeFromX(ShiftedCamToLookVector).Rotator();
-
-	FRotator ResultRot = FMath::Lerp(CurrentRotation, Rot, 0.5f);
-	StartFixedCamera->GetCamera()->SetWorldRotation(ResultRot);
+	FRotator CurrentRotation = Player->GetCameraBoom()->GetTargetRotation();
+	StartFixedCamera->GetCamera()->SetWorldRotation(CurrentRotation);
 	
 	Controller->SetViewTarget(StartFixedCamera);
 }
 
-void ASGCamera::FixedCameraWork(ASGPlayerCharacter* Player)
+void ASGCamera::InitFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
-	FVector CamToLookVector = Player->GetActorLocation() - StartFixedCamera->GetCamera()->GetComponentLocation();
-	FVector ShiftedCamToLookVector = CamToLookVector.RotateAngleAxis(ShiftRotateAngle, FVector::ZAxisVector);
+	StartFixedCamera->GetSpringArm()->bDoCollisionTest = false;
 	
-	FRotator CurrentRotation = StartFixedCamera->GetCamera()->GetComponentRotation();
-	FRotator Rot = FRotationMatrix::MakeFromX(ShiftedCamToLookVector).Rotator();
+	StartFixedCamera->GetCamera()->FieldOfView = Player->GetFollowCamera()->FieldOfView;
+	
+	FVector FollowCameraSocketOffset = Player->GetCameraBoom()->SocketOffset;
+	FVector UnfixedPosition = Player->GetCameraBoom()->GetUnfixedCameraPosition();
 
-	FRotator ResultRot = FMath::Lerp(CurrentRotation, Rot, 0.5f);
-	StartFixedCamera->GetCamera()->SetWorldRotation(ResultRot);
+	FRotator SpringArmTargetRotation = Player->GetCameraBoom()->GetTargetRotation();
+	SpringArmTargetRotation.Yaw += ShiftRotateAngle;
+	StartFixedCamera->GetCamera()->SetWorldRotation(SpringArmTargetRotation);
+	
+	StartFixedCamera->GetSpringArm()->SocketOffset = FollowCameraSocketOffset;
+	
+	StartFixedCamera->GetCamera()->SetUsingAbsoluteLocation(true);
+	
+	GroundCheck(UnfixedPosition, UnfixedPosition);
+	StartFixedCamera->GetCamera()->SetWorldLocation(UnfixedPosition);
+	
+	Controller->SetViewTarget(StartFixedCamera);
 }
 
+void ASGCamera::FixedCameraWithNoRotateWork(ASGPlayerCharacter* Player) { }
 
-//(ì •ë°©í–¥) ì¶”ì  ì¹´ë©”ë¼ ì´ˆê¸°í™”
+void ASGCamera::FixedCameraWork(ASGPlayerCharacter* Player) { }
+
+
+//(Á¤¹æÇâ) ÃßÀû Ä«¸Ş¶ó ÃÊ±âÈ­
 void ASGCamera::InitTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
 	if(IsInitTraceCamera) return;
+	IsInitTraceCamera = true;
 	
 	if(IsDrivingMode)
 	{
+		FVector UnfixedPosition = Player->GetCameraBoom()->GetUnfixedCameraPosition();
+		FRotator TargetRotation = Player->GetCameraBoom()->GetTargetRotation();
+
+		TraceCamera->GetSpringArm()->bDoCollisionTest = false;
+		TraceCamera->GetSpringArm()->bEnableCameraLag = false;
+		TraceCamera->GetSpringArm()->bEnableCameraRotationLag = false;
+		
+		TraceCamera->GetSpringArm()->SocketOffset = FVector(0, 0, 100);
 		TraceCamera->SetActorLocation(Player->GetActorLocation());
+
+		TraceCamera->GetSpringArm()->SetWorldRotation(TargetRotation);
+		TraceCamera->GetCamera()->SetWorldLocation(UnfixedPosition);
 	}
 	else
 	{
+		FVector BallLocation = Player->GetActorLocation();
+		TraceCamera->GetCamera()->FieldOfView = Player->GetFollowCamera()->FieldOfView;
+	
 		float OffSetShiftRotateAngle = 0.0f;
 		if(!IsTeeShot){ OffSetShiftRotateAngle = ShiftSecondShotOffSetAngle; }
-		
+	
 		FVector CamToBallDirVector = Player->GetActorLocation() - TraceCamera->GetCamera()->GetComponentLocation();
 		FVector ShiftedCamToBallDirVector = CamToBallDirVector.RotateAngleAxis(ShiftRotateAngle + OffSetShiftRotateAngle, FVector::ZAxisVector);
 		ShiftedCamToBallDirVector.Z = 0;
 		FRotator TargetRot = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
-
+	
+		float BackwardLength = 300;
+	
+		FVector FollowCameraLoc = ((BallLocation - Player->GetActorForwardVector() * BackwardLength));
+		GroundCheck(FollowCameraLoc, FollowCameraLoc);
+		
 		TraceCamera->GetCamera()->SetWorldRotation(TargetRot);
 	}
 	
@@ -994,7 +1270,7 @@ void ASGCamera::InitTraceCameraWork(APlayerController* Controller, ASGPlayerChar
  	Controller->SetViewTarget(TraceCamera);
 }
 
-//ì¸¡ë©´ ì¹´ë©”ë¼ ì´ˆê¸°í™”
+//Ãø¸é Ä«¸Ş¶ó ÃÊ±âÈ­
 void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
 	FVector BallLocation = Player->GetActorLocation();
@@ -1010,11 +1286,11 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 	
 	if(IsLanding)
 	{
-		float distX = predictLandingPosition.X - BallLocation.X;	//í˜„ì¬ ê³µ ìœ„ì¹˜ì™€ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distX = predictLandingPosition.X - BallLocation.X;	//ÇöÀç °ø À§Ä¡¿Í ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 		float distY = predictLandingPosition.Y - BallLocation.Y;
-		float distZ = BallLocation.Z - predictLandingPosition.Z;	//í˜„ì¬ ê³µ ìœ„ì¹˜ì™€ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distZ = BallLocation.Z - predictLandingPosition.Z;	//ÇöÀç °ø À§Ä¡¿Í ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 		
-		//45ë„ ì¸¡ë©´ ì¹´ë©”ë¼ì˜ ìœ„ì¹˜ë¥¼ APEXì™€ ì˜ˆì¸¡ ë‚™êµ¬ ì§€ì  ì¤‘ê°„ìœ¼ë¡œ ì¡ëŠ”ë‹¤.
+		//45µµ Ãø¸é Ä«¸Ş¶óÀÇ À§Ä¡¸¦ APEX¿Í ¿¹Ãø ³«±¸ ÁöÁ¡ Áß°£À¸·Î Àâ´Â´Ù.
 		SG_LOG(Log, "SJW 001 InitSideCameraWork called after apex");
 		NewApexPredictPosition = FVector(
 			BallLocation.X + distX * ResultSideCameraLocationXYRatio,
@@ -1022,12 +1298,12 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 			predictLandingPosition.Z + distZ * ResultSideCameraLocationZRatio
 		);
 	}
-	//ì•„ì§ ìƒìŠ¹ì¤‘
+	//¾ÆÁ÷ »ó½ÂÁß
 	else
 	{
-		float distX = predictLandingPosition.X - predictApexPosition.X;	//APEX ì§€ì ê³¼ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distX = predictLandingPosition.X - predictApexPosition.X;	//APEX ÁöÁ¡°ú ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 		float distY = predictLandingPosition.Y - predictApexPosition.Y;
-		float distZ = predictApexPosition.Z - predictLandingPosition.Z;	//APEX ì§€ì ê³¼ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distZ = predictApexPosition.Z - predictLandingPosition.Z;	//APEX ÁöÁ¡°ú ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 
 		SG_LOG(Log, "SJW 001 InitSideCameraWork distX %f", distX);
 		SG_LOG(Log, "SJW 001 InitSideCameraWork distZ %f", distZ);
@@ -1039,10 +1315,8 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 			predictLandingPosition.Z + distZ * ResultSideCameraLocationZRatio
 		);
 	}
-	
-	GroundCheck(SideCamera->GetCamera()->GetComponentLocation(), sideCameraLocation);
 
-	//ì˜ˆì™¸ ìƒí™© ë°©ì–´ì½”ë“œ
+	//¿¹¿Ü »óÈ² ¹æ¾îÄÚµå
 	if((predictApexPosition.X == 0) && (predictApexPosition.Y == 0))
 	{
 		sideCameraLocation = BallLocation;
@@ -1086,6 +1360,10 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 				SelectedSecondCameraRecord->Side_Camera_Distance * 100 :
 				SideCameraDist;
 
+	//test code
+	IsCameraRightCondition = true;
+	//end test code
+	
 	if (Player->GetInOutFanceBoundarieWhite())
 	{
 		if(IsCameraRightCondition)
@@ -1094,33 +1372,33 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 			
 			sideCameraLocation += SideDir * ResultSideCameraDist;
 			
-			bool IsOB = IsOBZPos(sideCameraLocation);
-			if(IsOB)
-			{
-				//side spinì´ 1000 ì´ìƒì¸ ê²½ìš° apex ì§€ì  ë°©í–¥ìœ¼ë¡œ ì´ë™í•˜ë©´ì„œ holeboxê°€ ê°ì§€ë˜ëŠ” ì§€ì ê¹Œì§€ ì¹´ë©”ë¼ë¥¼ ë‹¹ê¸´ë‹¤.
-				if(FMath::Abs(sideSpinRate) > 1000)
-				{
-					FVector ResultLoc = sideCameraLocation;
-					GetFairWayPosFromOBToApex(sideCameraLocation, NewApexPredictPosition, ResultLoc);
-					sideCameraLocation = ResultLoc;
-					sideCameraLocation -= SideDir * 500;
-				}
-				else
-				{
-					sideCameraLocation -= SideDir * ResultSideCameraDist * 0.2f;
-				}
-			}
+			// bool IsOB = IsOBZPos(sideCameraLocation);
+			// if(IsOB)
+			// {
+			// 	//side spinÀÌ 1000 ÀÌ»óÀÎ °æ¿ì apex ÁöÁ¡ ¹æÇâÀ¸·Î ÀÌµ¿ÇÏ¸é¼­ holebox°¡ °¨ÁöµÇ´Â ÁöÁ¡±îÁö Ä«¸Ş¶ó¸¦ ´ç±ä´Ù.
+			// 	if(FMath::Abs(sideSpinRate) > 1000)
+			// 	{
+			// 		FVector ResultLoc = sideCameraLocation;
+			// 		GetFairWayPosFromOBToApex(sideCameraLocation, NewApexPredictPosition, ResultLoc);
+			// 		sideCameraLocation = ResultLoc;
+			// 		sideCameraLocation -= SideDir * 500;
+			// 	}
+			// 	else
+			// 	{
+			// 		sideCameraLocation -= SideDir * ResultSideCameraDist * 0.2f;
+			// 	}
+			// }
 		}
 		else
 		{
 			SG_LOG(Log, "SJW 110 normal left camera case aaa");
 			sideCameraLocation -= SideDir * ResultSideCameraDist;
 	
-			//Side Cameraê°€ OBì˜ì—­ê¹Œì§€ ì´ë™í–ˆìœ¼ë©´ FairWay ì•ˆìª½ìœ¼ë¡œ ì¬ë³´ì • í•´ì¤€ë‹¤.
+			//Side Camera°¡ OB¿µ¿ª±îÁö ÀÌµ¿ÇßÀ¸¸é FairWay ¾ÈÂÊÀ¸·Î Àçº¸Á¤ ÇØÁØ´Ù.
 			bool IsOB = IsOBZPos(sideCameraLocation);
 			if(IsOB)
 			{
-				//side spinì´ 1000 ì´ìƒì¸ ê²½ìš° apex ì§€ì  ë°©í–¥ìœ¼ë¡œ ì´ë™í•˜ë©´ì„œ holeboxê°€ ê°ì§€ë˜ëŠ” ì§€ì ê¹Œì§€ ì¹´ë©”ë¼ë¥¼ ë‹¹ê¸´ë‹¤.
+				//side spinÀÌ 1000 ÀÌ»óÀÎ °æ¿ì apex ÁöÁ¡ ¹æÇâÀ¸·Î ÀÌµ¿ÇÏ¸é¼­ holebox°¡ °¨ÁöµÇ´Â ÁöÁ¡±îÁö Ä«¸Ş¶ó¸¦ ´ç±ä´Ù.
 				if(FMath::Abs(sideSpinRate) > 1000)
 				{
 					FVector ResultLoc = sideCameraLocation;
@@ -1156,7 +1434,7 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 			sideCameraLocation = FVector(FromSideCameraToRightSafeAreaPos.X, FromSideCameraToRightSafeAreaPos.Y, predictApexPosition.Z);
 			sideCameraLocation += SideDir * 500;
 		}
-		//ì˜ˆì™¸ ìƒí™© [í˜„ì¬ ìˆ˜ì§ ì•„ë˜ë„ ì¢Œìš°ë¡œë„ í™€ë°•ìŠ¤ ê°ì§€ë˜ì§€ ì•Šì€ ê²½ìš° ex. í˜¸ìˆ˜ ê°€ë¡œì§ˆëŸ¬ ê°€ëŠ” ì½”ìŠ¤, ë„ˆë¬´ ë©€ë¦¬ OBë¥¼ ë²—ì–´ë‚˜ì„œ ê°€ëŠ” ê²½ìš°]
+		//¿¹¿Ü »óÈ² [ÇöÀç ¼öÁ÷ ¾Æ·¡µµ ÁÂ¿ì·Îµµ È¦¹Ú½º °¨ÁöµÇÁö ¾ÊÀº °æ¿ì ex. È£¼ö °¡·ÎÁú·¯ °¡´Â ÄÚ½º, ³Ê¹« ¸Ö¸® OB¸¦ ¹ş¾î³ª¼­ °¡´Â °æ¿ì]
 		else
 		{
 			if(IsCameraRightCondition)
@@ -1171,7 +1449,8 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 			}
 		}
 	}
-	
+ 
+	GroundCheck(SideCamera->GetCamera()->GetComponentLocation(), sideCameraLocation);
 	SideCamera->SetActorLocation(sideCameraLocation);
 
 	FRotator Rot = FRotationMatrix::MakeFromX(Player->GetActorLocation() - SideCamera->GetActorLocation()).Rotator();
@@ -1234,7 +1513,7 @@ void ASGCamera::GetFairWayPosFromOBToApex(FVector From, FVector To, FVector &Res
 
 		if (IsInsideBoundary)
 		{
-			//HoleBox ì˜ì—­ì—ì„œ FairWay ì˜ì—­ì„ ë‹¤ì‹œ ì„¸ë¶€ì ìœ¼ë¡œ ì°¾ëŠ”ë‹¤.
+			//HoleBox ¿µ¿ª¿¡¼­ FairWay ¿µ¿ªÀ» ´Ù½Ã ¼¼ºÎÀûÀ¸·Î Ã£´Â´Ù.
 			for (int j = 1; j <= 20; j++)
 			{
 				FVector NextLocation2 = NextLocation + j * 200;
@@ -1264,7 +1543,7 @@ void ASGCamera::GetFairWayPosFromOBToApex(FVector From, FVector To, FVector &Res
 	}
 }
 
-//(ì—­ë°©í–¥) ì§€ë©´ ê³ ì • ì¹´ë©”ë¼ ì´ˆê¸°í™”
+//(¿ª¹æÇâ) Áö¸é °íÁ¤ Ä«¸Ş¶ó ÃÊ±âÈ­
 void ASGCamera::InitReverseFixedCameraWork(APlayerController* Controller, FVector BallLocation)
 {
 	FVector MoveDirection = predictLandingPosition - BallLocation;
@@ -1311,7 +1590,7 @@ void ASGCamera::InitReverseFixedCameraWork(APlayerController* Controller, FVecto
 	
 	FVector Loc = BallLocation;
 	
-	// ì¹´ë©”ë¼ ìœ„ì¹˜ ì§€ë©´ ìœ„ë¡œ ë³´ì •
+	// Ä«¸Ş¶ó À§Ä¡ Áö¸é À§·Î º¸Á¤
 	GroundCheck(ReverseLandFixedCamera->GetCamera()->GetComponentLocation(), Loc);
 
 	FRotator Rot = FRotationMatrix::MakeFromX(BallLocation - ReverseLandFixedCamera->GetActorLocation()).Rotator();
@@ -1320,14 +1599,14 @@ void ASGCamera::InitReverseFixedCameraWork(APlayerController* Controller, FVecto
 	Controller->SetViewTarget(ReverseLandFixedCamera);
 }
 
-//(ì—­ë°©í–¥) ì¶”ì  ì¹´ë©”ë¼ ì´ˆê¸°í™”
+//(¿ª¹æÇâ) ÃßÀû Ä«¸Ş¶ó ÃÊ±âÈ­
 void ASGCamera::InitReverseTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
 	Controller->SetViewTarget(ReverseCamera);
 	ReverseTraceCameraWork();
 }
 
-//45ë„ ì¸¡ë©´ ì¹´ë©”ë¼ ì´ˆê¸°í™”
+//45µµ Ãø¸é Ä«¸Ş¶ó ÃÊ±âÈ­
 void ASGCamera::InitSideBellowCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
 	FVector BallLocation = Player->GetActorLocation();
@@ -1339,11 +1618,11 @@ void ASGCamera::InitSideBellowCameraWork(APlayerController* Controller, ASGPlaye
 	
 	if(IsLanding)
 	{
-		float distX = predictLandingPosition.X - BallLocation.X;	//í˜„ì¬ ê³µ ìœ„ì¹˜ì™€ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distX = predictLandingPosition.X - BallLocation.X;	//ÇöÀç °ø À§Ä¡¿Í ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 		float distY = predictLandingPosition.Y - BallLocation.Y;
-		float distZ = BallLocation.Z - predictLandingPosition.Z;	//í˜„ì¬ ê³µ ìœ„ì¹˜ì™€ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distZ = BallLocation.Z - predictLandingPosition.Z;	//ÇöÀç °ø À§Ä¡¿Í ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 		
-		//45ë„ ì¸¡ë©´ ì¹´ë©”ë¼ì˜ ìœ„ì¹˜ë¥¼ APEXì™€ ì˜ˆì¸¡ ë‚™êµ¬ ì§€ì  ì¤‘ê°„ìœ¼ë¡œ ì¡ëŠ”ë‹¤.
+		//45µµ Ãø¸é Ä«¸Ş¶óÀÇ À§Ä¡¸¦ APEX¿Í ¿¹Ãø ³«±¸ ÁöÁ¡ Áß°£À¸·Î Àâ´Â´Ù.
 		SG_LOG(Log, "SJW 001 InitSideBellowCameraWork called after apex");
 		NewPosition = FVector(
 			BallLocation.X + distX * SideBellowCameraLocationXYRatio,
@@ -1351,12 +1630,12 @@ void ASGCamera::InitSideBellowCameraWork(APlayerController* Controller, ASGPlaye
 			predictLandingPosition.Z + distZ * ResultSideCameraLocationZRatio
 		);
 	}
-	//ì•„ì§ ìƒìŠ¹ì¤‘
+	//¾ÆÁ÷ »ó½ÂÁß
 	else
 	{
-		float distX = predictLandingPosition.X - predictApexPosition.X;	//APEX ì§€ì ê³¼ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distX = predictLandingPosition.X - predictApexPosition.X;	//APEX ÁöÁ¡°ú ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 		float distY = predictLandingPosition.Y - predictApexPosition.Y;
-		float distZ = predictApexPosition.Z - predictLandingPosition.Z;	//APEX ì§€ì ê³¼ ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+		float distZ = predictApexPosition.Z - predictLandingPosition.Z;	//APEX ÁöÁ¡°ú ¿¹»ó ³«±¸ÁöÁ¡ »çÀÌÀÇ °Å¸®
 
 		SG_LOG(Log, "SJW 001 InitSideBellowCameraWork distX %f", distX);
 		SG_LOG(Log, "SJW 001 InitSideBellowCameraWork distZ %f", distZ);
@@ -1380,101 +1659,118 @@ void ASGCamera::InitSideBellowCameraWork(APlayerController* Controller, ASGPlaye
 
 void ASGCamera::InitPuttingTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
-	float FollowCameraFOV = Player->GetFollowCamera()->FieldOfView + 5;
-	
-	PuttingTraceCamera->GetCamera()->FieldOfView = FollowCameraFOV;
-	
-	PuttingTraceCameraDir = Player->GetVelocity().GetSafeNormal();
-	PuttingTraceCameraDir.Z = 0;
-	
 	FVector BallLocation = Player->GetActorLocation();
 
-	float BackwardLength = 220;
-	FVector TargetCameraLocation = BallLocation + (-1 * PuttingTraceCameraDir * BackwardLength) + FVector(0, 0, 50);
-
-	FVector TraceCameraLocation = Player->GetFollowCamera()->GetComponentLocation();
+	FRotator SpringArmTargetRotation = Player->GetCameraBoom()->GetTargetRotation();
+	FVector FollowCameraSocketOffset = Player->GetCameraBoom()->SocketOffset;
 	
-	PuttingTraceCamera->GetCamera()->SetWorldLocation(TargetCameraLocation);
-	PuttingTraceCamera->GetCamera()->SetWorldRotation(
-		TraceCameraLocation.RotateAngleAxis(-0.2f, FVector::ZAxisVector).Rotation()
-	);
+	float BackwardLength = 300;
+    	if(IsValid(SelectedPuttingCameraRecord)){ BackwardLength = SelectedPuttingCameraRecord->Follow_Camera_Distance * 100; }
 
+	float BackwardOffset = 50.0f;
+	
+	FVector FollowCameraLoc = ((BallLocation - BallForwardVectorAfterImpact * (BackwardLength + BackwardOffset)) + FollowCameraSocketOffset);
+	// FVector LeftVector = FollowCameraLoc.RotateAngleAxis(90, FVector::ZAxisVector).GetSafeNormal() * 50;
+	// LeftVector.Z = 0;
+	// FollowCameraLoc += LeftVector;
+	
+	PuttingTraceCamera->GetCamera()->FieldOfView = Player->GetFollowCamera()->FieldOfView + 10;
+	PuttingTraceCamera->GetCamera()->SetWorldLocation(FollowCameraLoc);
+	
+	SpringArmTargetRotation.Yaw += ShiftRotateAngle;
+	
+	PuttingTraceCamera->GetCamera()->SetWorldRotation(SpringArmTargetRotation);
+
+	SG_LOG(Log, "SJW InitPuttingTraceCameraWork : %s", *FollowCameraLoc.ToString());
+	
 	Controller->SetViewTarget(PuttingTraceCamera);
 }
 
 void ASGCamera::PuttingTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
 {
-	PuttingPassTime += DeltaTime;
-	
-	if(!CanTraceCamera) return;
-
-	FVector CurrentCameraLocation = PuttingTraceCamera->GetCamera()->GetComponentLocation();
 	FVector BallLocation = Player->GetActorLocation();
 	
-	if(!IsHoleIn && Player->GetBallMoving())
-	{
-		FVector NewCameraLocation = BallLocation - PuttingTraceCameraDir * 220 + FVector(0, 0, 60);
+	FVector FollowCameraSocketOffset = Player->GetCameraBoom()->SocketOffset;
 
-		FVector LerpCameraLocation = FMath::Lerp(CurrentCameraLocation, NewCameraLocation, 0.5f);
-		PuttingTraceCamZPosFix(LerpCameraLocation);
-		
-		PuttingTraceCamera->GetCamera()->SetWorldLocation(LerpCameraLocation);
-	}
+	float BackwardLength = 300;
+	if(IsValid(SelectedPuttingCameraRecord)){ BackwardLength = SelectedPuttingCameraRecord->Follow_Camera_Distance * 100; }
 	
+	float BackwardOffset = 50.0f;
+	
+	FVector FollowCameraLoc = (
+		(BallLocation - BallForwardVectorAfterImpact * (BackwardLength + BackwardOffset)) + FollowCameraSocketOffset);
+	
+	if(CanTraceCamera)
+	{
+		// FVector LeftVector = FollowCameraLoc.RotateAngleAxis(90, FVector::ZAxisVector).GetSafeNormal() * 50;
+		// FollowCameraLoc += LeftVector;
+
+		PuttingTraceCamera->GetCamera()->SetWorldLocation(FollowCameraLoc);
+	}
+
 	if(CanRotateTraceCamera)
 	{
-		FVector LookAt = Player->GetActorLocation() + FVector(0, 0, 60);
-		FVector CamToLookVector = LookAt - PuttingTraceCamera->GetCamera()->GetComponentLocation();
-		FVector ShiftedCamToLookVector = CamToLookVector.RotateAngleAxis(ShiftRotateAngle + ShiftPuttingShotOffSetAngle, FVector::ZAxisVector);
-		// ShiftedCamToLookVector.Z = 0;
-
-		FRotator CurrentRot = TraceCamera->GetCamera()->GetComponentRotation();
-		FRotator TargetRot = FRotationMatrix::MakeFromX(ShiftedCamToLookVector).Rotator();
-		
-		FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, 0.5f);
-
-		PuttingTraceCamera->GetCamera()->SetWorldRotation(ResultRot);
+		FRotator SpringArmTargetRotation = Player->GetCameraBoom()->GetTargetRotation();
+		SpringArmTargetRotation.Yaw += ShiftRotateAngle;
+		PuttingTraceCamera->GetCamera()->SetWorldRotation(SpringArmTargetRotation);
 	}
 }
 
-
-void ASGCamera::PuttingZoomCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
+void ASGCamera::PuttingZoomCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
 {
 	float BallToHoleDist = FVector::Dist2D(holecupLocation, Player->GetActorLocation());
-	
-	FVector PuttingTraceCameraLocation = PuttingTraceCamera->GetCamera()->GetComponentLocation();
-	if(!IsPuttingZoomCameraSetLocationRotation)
-	{
-		PuttingZoomCamera->GetCamera()->SetWorldLocation(PuttingTraceCameraLocation);
-		IsPuttingZoomCameraSetLocationRotation = true;
-	}
 
 	float CurBallToHoleDist = FVector::Dist2D(Player->GetActorLocation(), holecupLocation);
 	CanRotateTraceCamera = CurBallToHoleDist > 30;
 
-	if(CanRotateTraceCamera)
+	if(!IsPuttingZoomCameraSetLocationRotation)
 	{
-		FRotator CurrentRot = PuttingTraceCamera->GetCamera()->GetComponentRotation();
-		FRotator TargetRot = FRotationMatrix::MakeFromX(Player->GetActorLocation() - PuttingTraceCameraLocation).Rotator();
+		FVector PuttingTraceCameraLocation = PuttingTraceCamera->GetCamera()->GetComponentLocation();
+		FRotator PuttingTraceCameraRotation = PuttingTraceCamera->GetCamera()->GetComponentRotation();
 
-		FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, 0.5f);
-		PuttingZoomCamera->GetCamera()->SetWorldRotation(ResultRot);
+		PuttingZoomCamera->SetActorLocation(Player->GetActorLocation());
+		PuttingZoomCamera->GetCamera()->SetWorldLocation(PuttingTraceCameraLocation);
+		PuttingZoomCamera->GetCamera()->SetWorldRotation(PuttingTraceCameraRotation);
+			
+		IsPuttingZoomCameraSetLocationRotation = true;
 	}
 	
-	//ê³µì´ ì¼ì • ì´ìƒ ë–¨ì–´ì ¸ ìˆê³ , ê³µì´ í™€ì— ì ì  ê°€ê¹Œì›Œì§€ëŠ”ì¤‘
+	//°øÀÌ ÀÏÁ¤ ÀÌ»ó ¶³¾îÁ® ÀÖ°í, °øÀÌ È¦¿¡ Á¡Á¡ °¡±î¿öÁö´ÂÁß
 	if(CurBallToHoleDist < PrevBallToHoleDist)
 	{
 		// SG_LOG(Log, "SJW 800 PuttingTraceCameraWork....111");
 
 		float ResultPuttingCameraZoomInMin = IsValid(SelectedPuttingCameraRecord) ?
 			SelectedPuttingCameraRecord->Zoom_Camera_Ratio : PuttingCameraZoomInMin;
-		
-		if((PuttingZoomCamera->GetCamera()->FieldOfView > ResultPuttingCameraZoomInMin) && CanRotateTraceCamera)
+
+		//test code
+		// ResultPuttingCameraZoomInMin = 40;
+		//end test code
+
+		float CurrentFOV = PuttingZoomCamera->GetCamera()->FieldOfView;
+
+		if(bIsZoomInLerping)
 		{
-			PuttingZoomCamera->GetCamera()->FieldOfView -= PuttingCameraZoomInSpeed;
+			if(!CanRotateTraceCamera)
+			{
+				bIsZoomInLerping = false;
+				return;
+			}
+			ZoomInPassTime += DeltaTime;
+
+			float TargetAlpha = ZoomInPassTime / ZoomInLerpTime;
+			float TargetLerpFOV = FMath::Lerp(CurrentFOV, ResultPuttingCameraZoomInMin, TargetAlpha);
+			PuttingZoomCamera->GetCamera()->FieldOfView = TargetLerpFOV;
+
+			SG_LOG(Log, "SJW PuttingZoom ZoomInPassTime %f", ZoomInPassTime);
+			
+			if(ZoomInPassTime > ZoomInLerpTime)
+			{
+				bIsZoomInLerping = false;
+			}
 		}
 	}
-	//ê³µì´ ë©€ì–´ì§€ëŠ” ì¤‘
+	//°øÀÌ ¸Ö¾îÁö´Â Áß
 	else if((CurBallToHoleDist >= PrevBallToHoleDist) && CanRotateTraceCamera && (CurBallToHoleDist > 300))
 	{
 		// SG_LOG(Log, "SJW 800 PuttingTraceCameraWork....222");
@@ -1492,23 +1788,117 @@ void ASGCamera::PuttingZoomCameraWork(APlayerController* Controller, ASGPlayerCh
 
 	if(Controller->GetViewTarget() != PuttingZoomCamera)
 	{
-		Controller->SetViewTarget(PuttingZoomCamera);
+		Controller->SetViewTargetWithBlend(PuttingZoomCamera, 0.1f, VTBlend_EaseIn);
 	}
 	
 	PrevBallToHoleDist = BallToHoleDist;
 }
 
+void ASGCamera::InitPuttingFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
+{
+	IS_VALID_RETURN(SelectedPuttingCameraRecord);
+	
+	FVector PlayerFollowCameraLocation = Player->GetActorLocation();
+	FVector NewHoleCupLocation = holecupLocation;
+	NewHoleCupLocation.Z = PlayerFollowCameraLocation.Z;
+	FVector BallLocation = Player->GetActorLocation();
 
-//(ì •ë°©í–¥) ì¶”ì  ì¹´ë©”ë¼ Tick ë‹¨ìœ„ ì²˜ë¦¬
+	//»çÀÌµå ¹èÄ¡ÀÎ °æ¿ì, È¦ÄÅ°ú °ø »çÀÌ ¾î´À ÁöÁ¡¿¡¼­ºÎÅÍ »çÀÌµå·Î ÀÌµ¿½ÃÅ³ °ÍÀÎÁö ±âÁØÁ¡
+	//À½¼öÀÎ °æ¿ì, ¿ª¹æÇâ [°ø°ú È¦ÄÅÀ» ¹İ´ëÂÊ¿¡¼­ ¹Ù¶óº»´Ù.]
+	float PuttSidePosition = SelectedPuttingCameraRecord->Putt_Side_Position;
+	int32 RotateDegree = SelectedPuttingCameraRecord->Putt_Fixed_Degree;
+	float DistCameraToHoleCup = SelectedPuttingCameraRecord->Putt_Fixed_Distance * 100;
+	
+	FVector OriginHoleToCamNormalVector = BallLocation - NewHoleCupLocation;
+	FVector HoleToCamNormalVector = OriginHoleToCamNormalVector;
+	HoleToCamNormalVector = HoleToCamNormalVector.RotateAngleAxis(-1 * RotateDegree, FVector::ZAxisVector);
+	HoleToCamNormalVector.Normalize();
+	HoleToCamNormalVector.Z = 0;
+	
+	SG_LOG(Log, "SJW NewHoleCupLocation : %s", *NewHoleCupLocation.ToString());
+	SG_LOG(Log, "SJW HoleToCamNormalVector : %s", *HoleToCamNormalVector.ToString());
+	SG_LOG(Log, "SJW DistCameraToHoleCup : %f", DistCameraToHoleCup);
+	
+	SG_LOG(Log, "SJW PlayerFollowCameraLocation : %s", *PlayerFollowCameraLocation.ToString());
+
+	bool IsRotateZero = RotateDegree == 0;
+	FVector NewTargetCameraLocation = IsRotateZero ?
+		PlayerFollowCameraLocation - BallForwardVectorAfterImpact * 300 + FVector(0, 0, 100) :
+		NewHoleCupLocation + HoleToCamNormalVector * DistCameraToHoleCup;
+	
+	if(RotateDegree != 0)
+	{
+		float OffSet = DistCameraToHoleCup * PuttSidePosition;
+		FVector OffSetVector = OriginHoleToCamNormalVector.GetSafeNormal() * OffSet;
+		OffSetVector.Z = 0;
+		NewTargetCameraLocation += OffSetVector;
+	}
+	
+	SG_LOG(Log, "SJW BallLocation : %s", *BallLocation.ToString());
+	
+	if((RotateDegree == 0)) { PuttingFixedCamera->GetCamera()->FieldOfView = Player->GetFollowCamera()->FieldOfView; }
+	else { PuttingFixedCamera->GetCamera()->FieldOfView = 80; }
+	
+	float HeightOffset = 0;
+	if(IsValid(SelectedPuttingCameraRecord) && (SelectedPuttingCameraRecord->Putt_Fixed_Height > 0))
+	{
+		HeightOffset = SelectedPuttingCameraRecord->Putt_Fixed_Height * 100;
+	}
+	
+	NewTargetCameraLocation.Z += HeightOffset;
+	
+	PuttingFixedCamera->SetActorLocation(NewHoleCupLocation);
+	PuttingFixedCamera->GetCamera()->SetWorldLocation(NewTargetCameraLocation);
+
+	{
+		float Putt_Hole_Fixed = SelectedPuttingCameraRecord->Putt_Hole_Fixed;
+		bool IsPuttHoleFixedCond = Putt_Hole_Fixed == 1;
+
+		FVector CamToLookVector = Player->GetActorLocation() - PuttingFixedCamera->GetCamera()->GetComponentLocation();
+		FVector ShiftedCamToLookVector = CamToLookVector.RotateAngleAxis(ShiftRotateAngle + ShiftPuttingShotOffSetAngle, FVector::ZAxisVector);
+		FVector ShiftedHoleCupLookVector = (holecupLocation - PuttingFixedCamera->GetCamera()->GetComponentLocation())
+			.RotateAngleAxis(ShiftRotateAngle + ShiftPuttingShotOffSetAngle, FVector::ZAxisVector);
+		
+		FVector LookTarget = IsPuttHoleFixedCond ?
+			ShiftedHoleCupLookVector :
+			ShiftedCamToLookVector;
+	
+		FRotator Rot = FRotationMatrix::MakeFromX(LookTarget).Rotator();
+		PuttingFixedCamera->GetCamera()->SetWorldRotation(Rot);
+
+		SG_LOG(Log, "SJW NewTargetCameraLocation : %s", *NewTargetCameraLocation.ToString());
+	}
+	Controller->SetViewTarget(PuttingFixedCamera);
+}
+
+void ASGCamera::PuttingFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
+{
+	IS_VALID_RETURN(SelectedPuttingCameraRecord);
+
+	float Putt_Hole_Fixed = SelectedPuttingCameraRecord->Putt_Hole_Fixed;
+	bool IsPuttHoleFixedCond = Putt_Hole_Fixed == 1;
+
+	FVector CamToLookVector = Player->GetActorLocation() - PuttingFixedCamera->GetCamera()->GetComponentLocation();
+	FVector ShiftedCamToLookVector = CamToLookVector.RotateAngleAxis(ShiftRotateAngle + ShiftPuttingShotOffSetAngle, FVector::ZAxisVector);
+	FVector ShiftedHoleCupLookVector = (holecupLocation - PuttingFixedCamera->GetCamera()->GetComponentLocation())
+		.RotateAngleAxis(ShiftRotateAngle + ShiftPuttingShotOffSetAngle, FVector::ZAxisVector);
+	FVector LookTarget = IsPuttHoleFixedCond ?
+		ShiftedHoleCupLookVector :
+		ShiftedCamToLookVector;
+	
+	FRotator Rot = FRotationMatrix::MakeFromX(LookTarget).Rotator();
+	PuttingFixedCamera->GetCamera()->SetWorldRotation(Rot);
+}
+
+//(Á¤¹æÇâ) ÃßÀû Ä«¸Ş¶ó Tick ´ÜÀ§ Ã³¸®
 void ASGCamera::TraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
 {
-	if(IsDrivingMode) {	DrivingModeTraceCameraSubWork(Controller, Player, DeltaTime); }	//ì—°ìŠµì¥ì¸ ê²½ìš°
-	else { CourseModeTraceCameraSubWork(Controller, Player, DeltaTime); }					//ì½”ìŠ¤ì¸ ê²½ìš°
-	
+	if(IsDrivingMode) {	DrivingModeTraceCameraSubWork(Controller, Player, DeltaTime); }		//¿¬½ÀÀåÀÎ °æ¿ì
+	else { CourseModeTraceCameraSubWork(Controller, Player, DeltaTime); }					//ÄÚ½ºÀÎ °æ¿ì
 }
 
 
-//(ì •ë°©í–¥) [ì½”ìŠ¤ ëª¨ë“œ] ì¶”ì  ì¹´ë©”ë¼ í•˜ìœ„ Work ì²˜ë¦¬ 
+//(Á¤¹æÇâ) [ÄÚ½º ¸ğµå] ÃßÀû Ä«¸Ş¶ó ÇÏÀ§ Work Ã³¸® 
 void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
 {
 	if(CameraStep == 0)	{ IS_VALID_RETURN(SelectedFirstCameraRecord); }
@@ -1519,17 +1909,18 @@ void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGP
 
 	if (!TraceCamera->GetSpringArm()->bEnableCameraRotationLag)
 		TraceCamera->GetSpringArm()->bEnableCameraRotationLag = true;
-
+	
 	FVector BallLocation = Player->GetActorLocation();
-	FVector CurrentCameraLocation = TraceCamera->GetCamera()->GetComponentLocation();
-
-	//ìƒ· ì§í›„ ì¶”ì ì¹´ë©”ë¼ Stepì¸ ê²½ìš°
+	FVector NewTargetCameraLocation = TraceCamera->GetCamera()->GetComponentLocation();
+	
+	float BallToCameraDist = FVector::Dist(BallLocation, NewTargetCameraLocation);
+	// TraceCamera->GetSpringArm()->TargetArmLength = 1000;
+	
 	if(CameraStep == 0)
 	{
-		float BallToCameraDist = FVector::Dist(BallLocation, CurrentCameraLocation);
 		float TargetSheetFollowCamDist = SelectedFirstCameraRecord->Follow_Camera_Distance * 100;
 		
-		//ê³µì´ ìƒìŠ¹ì¤‘ì´ê³ , ê³µê³¼ ì¹´ë©”ë¼ ì‚¬ì´ ê±°ë¦¬ê°€ ì‹œíŠ¸ì˜ ê¸°ì¤€ ê±°ë¦¬ë³´ë‹¤ ê°€ê¹Œìš´ ê²½ìš° ë”°ë¼ê°€ì§€ ì•ŠëŠ”ë‹¤.
+		//°øÀÌ »ó½ÂÁßÀÌ°í, °ø°ú Ä«¸Ş¶ó »çÀÌ °Å¸®°¡ ½ÃÆ®ÀÇ ±âÁØ °Å¸®º¸´Ù °¡±î¿î °æ¿ì µû¶ó°¡Áö ¾Ê´Â´Ù.
 		if(!IsLanding && !IsPutting)
 		{
 			bool IsCameraCloseToBall = BallToCameraDist < TargetSheetFollowCamDist;
@@ -1539,9 +1930,16 @@ void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGP
 		{
 			CanTraceCamera = true;
 		}
-		
-		// SG_LOG(Log, "SJW BallToCameraDist %f", BallToCameraDist);
-		// SG_LOG(Log, "SJW TargetSheetFollowCamDist %f", TargetSheetFollowCamDist);
+	}
+	else if(CameraStep == 1)
+	{
+		float TargetSheetFollowCamDist = SelectedSecondCameraRecord->Follow_Camera_Distance * 100;
+
+		float CurrentArmLength = TraceCamera->GetSpringArm()->TargetArmLength;
+		if(!IsBallImpacted && (CurrentArmLength < TargetSheetFollowCamDist))
+		{
+			TraceCamera->GetSpringArm()->TargetArmLength += 10;
+		}
 	}
 
 	#pragma region FOVChange
@@ -1553,29 +1951,53 @@ void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGP
 	#pragma endregion
 
 	#pragma region SocketOffsetChange
-	if((flyingTime >= 0.3f) && IsTeeShot && !IsPutting)
+	if((flyingTime > 0.8f) && CanTraceCamera)
 	{
-		FVector CurrentSocketOffset = TraceCamera->GetSpringArm()->SocketOffset;
-		FVector TargetSocketOffset = FVector(0, 0, -100);
-				
-		FVector LerpSocketOffset = FMath::Lerp(CurrentSocketOffset, TargetSocketOffset, 0.5f);
-		TraceCamera->GetSpringArm()->SocketOffset = LerpSocketOffset;
+		if(bIsTraceCameraSocketChangeLerping)
+		{
+			TraceCameraSocketChangeTime += DeltaTime;
+
+			float SocketAlpha = TraceCameraSocketChangeTime /  TraceCameraSocketChangeLerpTime;
+			FVector LerpSocketOffset = FMath::Lerp(
+				FVector(0, 0, 0),
+				FVector(0, 0, -150),
+				SocketAlpha
+			);
+			
+			TraceCamera->GetSpringArm()->SocketOffset = LerpSocketOffset;
+
+			if(TraceCameraSocketChangeTime >= TraceCameraSocketChangeLerpTime)
+			{
+				bIsTraceCameraSocketChangeLerping = false;
+			}
+		}
 	}
 	#pragma endregion
 
 	#pragma region CameraTrace
 	if(CanTraceCamera)
 	{
-		FVector PrevCameraLocation = CurrentCameraLocation;
-		//ê³µì´ ì§€ë©´ì— ë‹¿ì€ ì´í›„ë¶€í„° ì¹´ë©”ë¼ ê³ ë„ ìœ ì§€
-		// if(IsBallImpacted) { CurrentCameraLocation.Z = TraceCameraPrevLocationAfterBallImpacted.Z; }
-		TraceCamZPosFix(BallLocation, CurrentCameraLocation);
+		FVector PrevCameraLocation = NewTargetCameraLocation;
+		
+		if(IsBallAlmostImpacted)
+		{
+			//±×¸°¿¡ °øÀÌ Áö¸é¿¡ ´êÀº ÀÌÈÄºÎÅÍ Ä«¸Ş¶ó °íµµ À¯Áö
+			NewTargetCameraLocation.Z = TraceCameraPrevLocationAfterBallImpacted.Z;
+		}
+		
+		TraceCamZPosFix(BallLocation, NewTargetCameraLocation);
 
-		//ìˆœì„œ ì¤‘ìš”
-		FVector TargetLerpLocation = FMath::Lerp(CurrentCameraLocation, PrevCameraLocation, 0.5f);
+		float TargetAlpha = !IsBallAlmostImpacted ? 0.5f : 0.1f;
+		
+		//¼ø¼­ Áß¿ä
+		FVector TargetLerpLocation = FMath::Lerp(NewTargetCameraLocation, PrevCameraLocation, TargetAlpha);
 		TraceCamera->GetCamera()->SetWorldLocation(TargetLerpLocation);
 		
 		TraceCamera->SetActorLocation(BallLocation);
+	}
+	else{
+		TraceCamZPosFix(BallLocation, NewTargetCameraLocation);
+		TraceCamera->GetCamera()->SetWorldLocation(NewTargetCameraLocation);
 	}
 	#pragma endregion
 
@@ -1586,15 +2008,34 @@ void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGP
 		PuttingTraceCameraWork(Controller, Player, DeltaTime);
 		TraceCamera->GetCamera()->SetRelativeLocation(FVector(0, 0, 100));
 	}
-#pragma endregion
+	#pragma endregion
+
+	bool IsOutSafeScreenArea = false;
+	bool UpperUnSafe = false;
+	bool BottomUnsafe = false;
 	
 	#pragma region CameraRotate
 	if(CanRotateTraceCamera)
 	{
-		bool IsOutSafeScreenArea = false;
-		bool UpperUnSafe = false;
-		bool BottomUnsafe = false;
-		
+		if(!IsPutting)
+		{
+			FVector2D ScreenLocation;
+			bool bIsOnScreen = Controller->ProjectWorldLocationToScreen(Player->GetActorLocation(), ScreenLocation);
+			if(bIsOnScreen)
+			{
+				//7µµ ÀÌÇÏ¿¡¼­´Â SafeArea Ã³¸®¸¦ ÇÏÁö ¾Ê´Â´Ù.
+				if(launchAngle <= 7)
+				{
+					IsOutSafeScreenArea = true;
+				}
+				else
+				{
+					// SG_LOG(Log, "SJW 777 %hs", IsOutSafeScreenArea ? "Out SafeArea" : "In SafeArea");
+					CheckUnSafeScreenArea(FMath::Abs(ScreenLocation.Y), UpperUnSafe, BottomUnsafe);
+				}
+			}
+		}
+
 		float OffSetRotateAngle = 0.0f;
 		if(!IsTeeShot) { OffSetRotateAngle = ShiftSecondShotOffSetAngle; }
 		
@@ -1612,7 +2053,7 @@ void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGP
 		}
 		else
 		{
-			if(IsBallImpacted)
+			if(IsBallAlmostImpacted)
 			{
 				if(IsBadImpacted)
 				{
@@ -1621,47 +2062,121 @@ void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGP
 				}
 				else
 				{
-					TargetRot = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
+					//Áö¸é¿¡ ´êÀº ÀÌÈÄ
+					if(IsBallImpacted)
+					{
+						//Ã³À½¿¡ È¸ÀüÀ» ¸Å¿ì ´À¸®°Ô ÇØÁÖ°í
+						if(bIsTraceCameraRotateChangeAfterImpactedLerping)
+						{
+							TraceCameraRotateTimeChangeAfterImpactedTime += DeltaTime;
+							
+							float CameraRotAlpha = TraceCameraRotateTimeChangeAfterImpactedTime / TraceCameraRotateChangeAfterImpactedTime;
+
+							FRotator ResultRot =  FMath::Lerp(CurrentRot, TargetRot, CameraRotAlpha);
+							TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
+
+							if (TraceCameraRotateTimeChangeAfterImpactedTime >= TraceCameraRotateChangeAfterImpactedTime)
+							{
+								bIsTraceCameraRotateChangeAfterImpactedLerping = false;
+							}
+						}
+						//Ã³À½ ÀÌÈÄ È¸Àü Ã³¸®
+						else
+						{
+							TargetRot = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
 					
-					FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, 0.02f);
-					TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
+							FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, 0.02f);
+							TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
+						}
+					}
+					//¾ÆÁ÷ Áö¸é¿¡ ´êÁö ¾ÊÀº »óÈ²
+					else
+					{
+						TargetRot = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
+					
+						FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, 0.02f);
+						TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
+					}
 				}
 			}
 			else
 			{
-				if(flyingTime >= 0.1f)
+				if(IsBottomOutSafeAreaDetected)
 				{
-					if(IsLanding)
-					{
-						if(BottomUnsafe && !IsBottomOutSafeAreaDetected)
-						{
-							// SG_LOG(Log, "SJW 777 Descending....And BottomUnsafe area detected");
-							IsBottomOutSafeAreaDetected = true;
-						}
-
-						float Alpha = IsBottomOutSafeAreaDetected ? 0.4f : 0.1f;
-					
-						FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, Alpha);
-						TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
-					}
-					else
-					{
-						if(UpperUnSafe && !IsUpperOutSafeAreaDetected)
-						{
-							// SG_LOG(Log, "SJW 777 Ascending....And UpperUnSafe area detected");
-							IsUpperOutSafeAreaDetected = true;	
-						}
-
-						float Alpha = IsUpperOutSafeAreaDetected ? 0.4f : 0.1f;
-					
-						FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, Alpha);
-						TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
-					}
+					FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, 0.03f);
+					TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
 				}
 			}
 		}
 	}
 	#pragma endregion
+
+	#pragma region CameraLagChange
+	if(flyingTime >= 0.1f)
+	{
+		if(!IsLanding)
+		{
+			if (IsTeeShot) 
+			{
+				if (flyingTime <= 0.8f)
+				{
+					TraceCamera->GetSpringArm()->CameraLagSpeed = 1;
+				}
+				else
+				{
+					//³¯¶ó°¡¸é¼­ »ìÂ¦ ´ç°ÜÁö´Â ¿¬Ãâ
+					if (bIsTraceCameraLagChangeLerping && IsTeeShot)
+					{
+						TraceCameraLagChangeTime += DeltaTime;
+
+						float CameraLagAlpha = TraceCameraLagChangeTime / TraceCameraLagLerpTime;
+						float LerpLagSpeed = FMath::Lerp(1, 4.0f, CameraLagAlpha);
+
+						TraceCamera->GetSpringArm()->CameraLagSpeed = LerpLagSpeed;
+
+						if (TraceCameraLagChangeTime >= TraceCameraLagLerpTime)
+						{
+							bIsTraceCameraLagChangeLerping = false;
+						}
+					}
+				}
+			}
+			else 
+			{
+				TraceCamera->GetSpringArm()->CameraLagSpeed = 2;
+			}
+		}
+		else
+		{
+			if(BottomUnsafe && !IsBottomOutSafeAreaDetected)
+			{
+				// SG_LOG(Log, "SJW 777 Descending....And BottomUnsafe area detected");
+				IsBottomOutSafeAreaDetected = true;
+			}
+			
+			if(IsBottomOutSafeAreaDetected)
+			{
+				if(!IsBallAlmostImpacted)
+				{
+					if(bIsTraceCameraLagChangeLerping2)
+					{
+						TraceCameraLagChangeTime2 += DeltaTime;
+				
+						float CameraLagAlpha = TraceCameraLagChangeTime2 / TraceCameraLagLerpTime2;
+						float LerpLagSpeed = FMath::Lerp(2, 10.0f, CameraLagAlpha);
+				
+						TraceCamera->GetSpringArm()->CameraLagSpeed = LerpLagSpeed;
+				
+						if(TraceCameraLagChangeTime2 >= TraceCameraLagLerpTime2)
+						{
+							bIsTraceCameraLagChangeLerping2 = false;
+						}
+					}
+				}
+			}
+		}
+	}
+	#pragma endregion 
 
 	#pragma region DecalScaleChange
 	if(IsLanding && Player->GetFlyingCheck())
@@ -1674,7 +2189,7 @@ void ASGCamera::CourseModeTraceCameraSubWork(APlayerController* Controller, ASGP
 #pragma endregion
 }
 
-//(ì •ë°©í–¥) [ì—°ìŠµì¥ ëª¨ë“œ] ì¶”ì  ì¹´ë©”ë¼ í•˜ìœ„ Work ì²˜ë¦¬
+//(Á¤¹æÇâ) [¿¬½ÀÀå ¸ğµå] ÃßÀû Ä«¸Ş¶ó ÇÏÀ§ Work Ã³¸®
 void ASGCamera::DrivingModeTraceCameraSubWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
 {
 	if (!TraceCamera->GetSpringArm()->bEnableCameraLag)
@@ -1688,8 +2203,9 @@ void ASGCamera::DrivingModeTraceCameraSubWork(APlayerController* Controller, ASG
 	{
 		FVector BallLocation = Player->GetActorLocation();
 		FVector CurrentCameraLocation = TraceCamera->GetCamera()->GetComponentLocation();
-				
 		FVector PrevCameraLocation = CurrentCameraLocation;
+
+		TraceCamZPosFix(BallLocation, CurrentCameraLocation);
 
 		FVector TargetLerpLocation = FMath::Lerp(CurrentCameraLocation, PrevCameraLocation, 0.5f);
 		TraceCamera->GetCamera()->SetWorldLocation(TargetLerpLocation);
@@ -1729,7 +2245,7 @@ void ASGCamera::DrivingModeTraceCameraSubWork(APlayerController* Controller, ASG
 	#pragma endregion
 }
 
-//(ì—­ë°©í–¥) ì§€ë©´ ê³ ì • ì¹´ë©”ë¼ Tick ë‹¨ìœ„ ì²˜ë¦¬
+//(¿ª¹æÇâ) Áö¸é °íÁ¤ Ä«¸Ş¶ó Tick ´ÜÀ§ Ã³¸®
 void ASGCamera::ReverseFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
 {
 	bool PrevRotationLag = ReverseLandFixedCamera->GetSpringArm()->bEnableCameraRotationLag;
@@ -1756,12 +2272,12 @@ void ASGCamera::ReverseFixedCameraWork(APlayerController* Controller, ASGPlayerC
 	
 	NewCameraLocation.Z = ResultHeight;
 
-	// ì¹´ë©”ë¼ ìœ„ì¹˜ ì§€ë©´ ìœ„ë¡œ ë³´ì •
+	// Ä«¸Ş¶ó À§Ä¡ Áö¸é À§·Î º¸Á¤
 	GroundCheck(ReverseLandFixedCamera->GetCamera()->GetComponentLocation(), NewCameraLocation);
-
+	
 	FRotator Rot = FRotationMatrix::MakeFromX(Player->GetActorLocation() - ReverseLandFixedCamera->GetActorLocation()).Rotator();
 
-	//Note. OBì—ì„œ ê³µì„ ì¹˜ëŠ” ê²½ìš°, GetFlyingCheck ê°’ì´ í•­ìƒ false ì¸ ë¬¸ì œê°€ ìˆì–´ ìš°íšŒí•¨
+	//Note. OB¿¡¼­ °øÀ» Ä¡´Â °æ¿ì, GetFlyingCheck °ªÀÌ Ç×»ó false ÀÎ ¹®Á¦°¡ ÀÖ¾î ¿ìÈ¸ÇÔ
 	if(IsBallImpacted)
 	{
 		if(ReverseLandFixedCamera->GetSpringArm()->bEnableCameraRotationLag == false)
@@ -1770,21 +2286,21 @@ void ASGCamera::ReverseFixedCameraWork(APlayerController* Controller, ASGPlayerC
 		}
 		ReverseLandFixedCamera->GetSpringArm()->CameraRotationLagSpeed = 10;
 
-		//ì§€ë©´ì— ë‹¿ì€ ì´í›„ ìˆ˜ì§ ì›€ì§ì„ ì°¨ë‹¨
+		//Áö¸é¿¡ ´êÀº ÀÌÈÄ ¼öÁ÷ ¿òÁ÷ÀÓ Â÷´Ü
 		Rot.Pitch = 0;
 	}
 	
 	ReverseLandFixedCamera->SetActorRotation(Rot);
 }
 
-//ì¸¡ë©´ ì¹´ë©”ë¼ Tick ë‹¨ìœ„ ì²˜ë¦¬
+//Ãø¸é Ä«¸Ş¶ó Tick ´ÜÀ§ Ã³¸®
 void ASGCamera::SideCameraWork(ASGPlayerCharacter* Player)
 {
 	FRotator Rot = FRotationMatrix::MakeFromX(Player->GetActorLocation() - SideCamera->GetActorLocation()).Rotator();
 	SideCamera->SetActorRotation(Rot);
 }
 
-//ì¸¡ë©´ 45ë„ ì‚¬ì´ë“œ ì¹´ë©”ë¼ Tick ë‹¨ìœ„ ì²˜ë¦¬
+//Ãø¸é 45µµ »çÀÌµå Ä«¸Ş¶ó Tick ´ÜÀ§ Ã³¸®
 void ASGCamera::SideBellowCameraWork(ASGPlayerCharacter* Player)
 {
 	FVector ResultLocation = SideCamera->GetCamera()->GetComponentLocation();
@@ -1796,7 +2312,7 @@ void ASGCamera::SideBellowCameraWork(ASGPlayerCharacter* Player)
 	SideCamera->SetActorRotation(Rot);
 }
 
-//(ì—­ë°©í–¥) ì¶”ì  ì¹´ë©”ë¼ Tick ë‹¨ìœ„ ì²˜ë¦¬
+//(¿ª¹æÇâ) ÃßÀû Ä«¸Ş¶ó Tick ´ÜÀ§ Ã³¸®
 void ASGCamera::ReverseTraceCameraWork()
 {
 	
@@ -1862,7 +2378,7 @@ bool ASGCamera::CheckCurrentHole(FVector InStart, FVector InEnd, FHitResult& Out
 
 	if (bIsGround)
 	{
-		ASGCourseMode* const CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
+		CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
 
 		if (IsValid(CourseMode))
 		{
@@ -1883,16 +2399,13 @@ bool ASGCamera::CheckCurrentHole(FVector InStart, FVector InEnd, FHitResult& Out
 
 void ASGCamera::LandingCheck(float DeltaTime)
 {
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr == GameInst) return;
+	if (nullptr == PlayerController) return;
+	if (nullptr == PlayerChar) return;
 
-	APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
-	if (nullptr == Controller) return;
-
-	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(Controller->GetCharacter());
-	if (nullptr == Player) return;
-
-	if (oldLocation.Z > Player->GetActorLocation().Z)
+	if(IsBallImpacted) return;
+	
+	if (oldLocation.Z > PlayerChar->GetActorLocation().Z)
 	{
 		IsLanding = true;
 	}
@@ -1900,7 +2413,8 @@ void ASGCamera::LandingCheck(float DeltaTime)
 	{
 		IsLanding = false;
 	}
-	oldLocation = Player->GetActorLocation();
+	
+	oldLocation = PlayerChar->GetActorLocation();
 }
 
 void ASGCamera::InitCameraRelativeRotation()
@@ -1908,7 +2422,7 @@ void ASGCamera::InitCameraRelativeRotation()
 	TraceCamera->GetCamera()->SetRelativeRotation(FRotator::ZeroRotator);
 	StartFixedCamera->GetCamera()->SetRelativeRotation(FRotator::ZeroRotator);
 	ReverseCamera->GetCamera()->SetRelativeRotation(FRotator::ZeroRotator);
-	GreenCamera->GetCamera()->SetRelativeRotation(FRotator::ZeroRotator);
+	PuttingFixedCamera->GetCamera()->SetRelativeRotation(FRotator::ZeroRotator);
 	SideCamera->GetCamera()->SetRelativeRotation(FRotator::ZeroRotator);
 }
 
@@ -1932,7 +2446,7 @@ void ASGCamera::SetCurFollowCam()
 	}
 }
 
-//ì˜ˆìƒ ë‚™êµ¬ì§€ì  ì‚°ì¶œ
+//¿¹»ó ³«±¸ÁöÁ¡ »êÃâ
 void ASGCamera::PredictLandingPosition(
 	FVector BallLocation,
 	FVector BallVelocity,
@@ -1954,14 +2468,10 @@ void ASGCamera::PredictLandingPosition(
 
 	bool bHit = UGameplayStatics::PredictProjectilePath(GetWorld(), PredictParams, PathResult);
 	
-	//FPredictProjectilePathParamsì— ì˜í•´ì„œ ì˜ˆìƒ ë‚™êµ¬ ì§€ì ì´ ê°ì§€ëœ ê²½ìš°
+	//FPredictProjectilePathParams¿¡ ÀÇÇØ¼­ ¿¹»ó ³«±¸ ÁöÁ¡ÀÌ °¨ÁöµÈ °æ¿ì
 	if(bHit && (PathResult.PathData.Num() > 2))
 	{
 		float MaxZ = PathResult.PathData[0].Location.Z;
-		if(IsLanding)
-		{
-			predictApexPosition = PathResult.PathData[0].Location;
-		}
 
 		int PathNum = PathResult.PathData.Num();
 		for (auto PathData : PathResult.PathData)
@@ -1978,63 +2488,174 @@ void ASGCamera::PredictLandingPosition(
 				if(PathData.Location.Z > MaxZ)
 				{
 					MaxZ = PathData.Location.Z;
-					predictApexPosition = PathData.Location;
 				}
 			}
 		}
 		
 		predictLandingPosition = PathResult.PathData.Last().Location;
-		if((predictLandingPosition.X == 0) && (predictApexPosition.Y == 0)) return;
+		if((predictLandingPosition.X == 0) && (predictApexPosition.Y == 0))
+		{
+			SG_LOG(Log, "SJW predictLandingPosition zero case...");
+			
+			predictApexPosition = PathResult.PathData[0].Location;
+		}
 
-		SG_LOG(Log, "SJW 111 BallLocation %s", *BallLocation.ToString());
-		SG_LOG(Log, "SJW 111 TargetWindForceVector %s", *TargetWindForceVector.ToString());
-		SG_LOG(Log, "SJW 111 origin Predict End Position %s", *predictLandingPosition.ToString());
-		SG_LOG(Log, "SJW 111 Magnus Velocity %s", *MagnusVelocity.ToString());
-		SG_LOG(Log, "SJW 111 PathNum %i", PathNum);
+		// SG_LOG(Log, "SJW 111 BallLocation %s", *BallLocation.ToString());
+		// SG_LOG(Log, "SJW 111 TargetWindForceVector %s", *TargetWindForceVector.ToString());
+		// SG_LOG(Log, "SJW 111 origin Predict End Position %s", *predictLandingPosition.ToString());
+		// SG_LOG(Log, "SJW 111 Magnus Velocity %s", *MagnusVelocity.ToString());
+		// SG_LOG(Log, "SJW 111 PathNum %i", PathNum);
+		// SG_LOG(Log, "SJW 111 predictApexPosition %s", *predictApexPosition.ToString());
+		SG_LOG(Log, "PathNum : %i, WindVector : %s", PathNum, *WindVector.ToString());
 		
-		USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
+		// predictLandingPositionForSkyTrace = predictLandingPosition;
+		
 		if(GameInst != nullptr)
 		{
 			predictLandingPosition.X += MagnusVelocity.X;
 			predictLandingPosition.Y += MagnusVelocity.Y;
-
-			//test code
-			// ASGCourseMode* CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
-			// if(IsValid(CourseMode))
-			// {
-			// 	CourseMode->SpawnDebugBlueBall(predictLandingPosition);
-			// }
-			//~test code
 		}
-		
-		//SG_LOG(Log, "SJW PredictApexPosition %s", *predictApexPosition.ToString());
-		SG_LOG(Log, "SJW 111 custom after Predict End Position case 01 %s", *predictLandingPosition.ToString());
 	}
 	else
 	{
 		predictLandingPosition = BallLocation;
-		SG_LOG(Log, "SJW 111 Predict End Position case 02 %s", *predictLandingPosition.ToString());
+	}
+
+	GetGroundFromPosition(predictLandingPosition, FVector::DownVector, predictLandingPosition);
+
+	// SG_LOG(Log, "predictLandingPosition origin %s", *predictLandingPosition.ToString());
+	FVector LeftDirVector = (predictLandingPosition - BallLocation).RotateAngleAxis(-90.0f, FVector::ZAxisVector).GetSafeNormal();
+	LeftDirVector.Z = 0;
+	LeftDirVector.Y = 0;
+	predictLandingPositionForSkyTrace = predictLandingPosition + LeftDirVector * sideSpinRate;
+	predictLandingPositionForSkyTrace.Y -= FMath::Abs(sideSpinRate);
+	// SG_LOG(Log, "predictLandingPosition after %s", *predictLandingPositionForSkyTrace.ToString());
+
+	float WindDotRes = FVector::DotProduct(BallVelocity.GetSafeNormal(), WindVector);
+	// SG_LOG(Log, "WindDotRes : %f", WindDotRes);
+
+	//¿ªÇ³ÀÎ °æ¿ì ¿¹Ãø ÁöÁ¡ µÚ·Î ´ç±ä´Ù.
+	if((WindDotRes < -0.5f) && (ballPower >= 6000))
+	{
+		// ASGCourseMode* CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
+		// if(IsValid(CourseMode))	{ CourseMode->CreateDummyTracePoint(predictLandingPositionForSkyTrace, "111"); }
+		
+		FVector DirBallToStart = (BallLocation - startLocation).GetSafeNormal();
+		DirBallToStart.Z = 0;
+
+		FVector WindOffSetVector = DirBallToStart * WindPower * WindVectorLandingPosOffset;
+		// SG_LOG(Log, "WindOffSetVector : %s", *WindOffSetVector.ToString());
+		
+		predictLandingPositionForSkyTrace -= WindOffSetVector;
+
+		// if(IsValid(CourseMode))	{ CourseMode->CreateDummyTracePoint(predictLandingPositionForSkyTrace, "222"); }
+	}
+
+	IsPredictGreenLanding = IsOnGreen(predictLandingPositionForSkyTrace);
+	if(IsPredictGreenLanding)
+	{
+		SG_LOG(Log, "Is Green Maybe....");
+		SkyTraceStopDist = SkyTraceLowApexStopDist = 400;
+		if(IsValid(CameraRailActor))
+		{
+			CameraRailActor->UpdateLimitGroundZ(GreenTrailLimitHeight);
+		}
+	}
+	else
+	{
+		if(IsValid(CameraRailActor))
+		{
+			CameraRailActor->UpdateLimitGroundZ(NoneGreenTrailLimitHeight);
+		}
+	}
+
+	if(IsValid(CameraRailActor))
+	{
+		CameraRailActor->IsPredictOBLanding = IsOBZPos(predictLandingPositionForSkyTrace);
 	}
 }
+
+void ASGCamera::PredictApexPosition(FVector BallLocation, FVector BallVelocity, FVector MagnusVector)
+{
+	FPredictProjectilePathResult PathResult;
+	
+	FPredictProjectilePathParams PredictParams;
+	PredictParams.StartLocation = BallLocation;
+	PredictParams.bTraceWithCollision = true;
+	PredictParams.SimFrequency = 15.0f;
+	PredictParams.TraceChannel = ECollisionChannel::ECC_Pawn;
+	PredictParams.MaxSimTime = 10;
+	FVector LaunchVelocity = BallVelocity;
+	PredictParams.LaunchVelocity = LaunchVelocity;
+
+	bool bHit = UGameplayStatics::PredictProjectilePath(GetWorld(), PredictParams, PathResult);
+
+	if(bHit && (PathResult.PathData.Num() > 2))
+	{
+		int Index = 0;
+		int AscendCount = 0;
+		float MaxZ = PathResult.PathData[0].Location.Z;
+		
+		for (auto PathData : PathResult.PathData)
+		{
+			if(PathData.Location.Z > MaxZ)
+			{
+				MaxZ = PathData.Location.Z;
+				predictApexPosition = PathData.Location;
+			}
+
+			if(Index > 0)
+			{
+				float PrevZ = PathResult.PathData[Index - 1].Location.Z;
+				if(PrevZ < PathData.Location.Z){ AscendCount++; }
+			}
+			Index++;
+		}
+
+		// SG_LOG(Log, "SJW [111] predictApexPosition before : %s", *predictApexPosition.ToString());
+
+		// if(AscendCount > 20) AscendCount = 20;
+		predictApexPosition.Z += AscendCount * MagnusVector.Z + 300.0f;
+
+		// SG_LOG(Log, "SJW [111] predictApexPosition after : %s", *predictApexPosition.ToString());
+		// SG_LOG(Log, "SJW [111] AscendCount : %i", AscendCount);
+		// SG_LOG(Log, "SJW [111] MagnusVector : %s", *MagnusVector.ToString());
+		// predictApexPosition.Z += MagnusVector.Z * AscendCount;
+	}
+}
+
 
 void ASGCamera::GroundCheck(FVector CameraLoc, FVector& ResultLoc)
 {
 	FHitResult HitResult;
 
-	FVector Start = CameraLoc + FVector(0, 0, 10000);
-	FVector End = CameraLoc - FVector(0, 0, 500);
+	FVector Start = ResultLoc + FVector(0, 0, 10000);
+	FVector End = ResultLoc - FVector(0, 0, 100);
 
 	bool bIsGround = USGGroundChecker::LineTraceGroundCheck(HitResult, Start, End, this);
 	if (bIsGround)
 	{
-		float ResultZ = HitResult.ImpactPoint.Z + 300;
-		ResultLoc = FVector(CameraLoc.X, CameraLoc.Y, ResultZ);
-	}
-	else
-	{
-		ResultLoc = CameraLoc;
+		float ResultZ = HitResult.ImpactPoint.Z + GroundCheckUpperAmount;
+		ResultLoc.Z = ResultZ;
 	}
 }
+
+FVector ASGCamera::GetVerticalGroundPos(FVector From)
+{
+	FHitResult HitResult;
+
+	FVector Start = From;
+	FVector End = From - FVector(0, 0, 100000);
+
+	bool bIsGround = USGGroundChecker::LineTraceGroundCheck(HitResult, Start, End, this);
+	if (bIsGround)
+	{
+		return HitResult.ImpactPoint;
+	}
+
+	return From;
+}
+
 
 bool ASGCamera::IsOBZPos(FVector CurrentLocation)
 {
@@ -2049,13 +2670,64 @@ bool ASGCamera::IsOBZPos(FVector CurrentLocation)
 	return IsInsideBoundary == false;
 }
 
+bool ASGCamera::IsOnGreen(FVector Pos)
+{
+	// ASGCourseMode* CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
+	// if(IsValid(CourseMode))	{ CourseMode->CreateDummyTracePoint(Pos, "SphereTraceFieldCheck"); }
+
+	float DetectRadius = 500.0f;
+	int DetectCount = 8;
+	int AnglePerDetect = 360 / DetectCount;
+
+	FVector Start = Pos + FVector(0, 0, 1000);
+	FVector End = Pos - FVector(0, 0, 1000);
+		
+	FHitResult HitResult;
+	bool IsDetected = USGGroundChecker::LineTraceGroundCheck(HitResult, Start, End, this);
+	if(IsDetected)
+	{
+		EPhysicalSurface FindedSurface = UGameplayStatics::GetSurfaceType(HitResult);
+
+		if (FindedSurface == SurfaceType4 || FindedSurface == SurfaceType6) // Green, Apron
+		{
+			return true;
+		}
+	}
+	
+	FVector TargetDir = FVector::LeftVector;
+	for(int i = 0; i < DetectCount; i++)
+	{
+		FVector NextDir = TargetDir.RotateAngleAxis(AnglePerDetect * i, FVector::ZAxisVector);
+		FVector TargetLoc = Pos + NextDir * DetectRadius;
+
+		Start = TargetLoc + FVector(0, 0, 1000);
+		End = TargetLoc - FVector(0, 0, 1000);
+		
+		IsDetected = USGGroundChecker::LineTraceGroundCheck(HitResult, Start, End, this);
+		if(IsDetected)
+		{
+			EPhysicalSurface FindedSurface = UGameplayStatics::GetSurfaceType(HitResult);
+
+			if (FindedSurface == SurfaceType4 || FindedSurface == SurfaceType6) // Green, Apron
+			{
+				return true;
+			}
+		}
+		
+		// ASGCourseMode* CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
+		// if(IsValid(CourseMode))	{ CourseMode->CreateDummyTracePoint(TargetLoc, "SphereTraceFieldCheck"); }
+	}
+	
+	return false;
+}
+
 
 void ASGCamera::GetLeftRightFairWayPos(FVector MoveDir, FVector FromLocation, FVector& LeftLoc, FVector& RightLoc)
 {
 	FVector GroundFromApex = FromLocation;
 	FVector SideDir = MoveDir.RotateAngleAxis(90, FVector::ZAxisVector).GetSafeNormal();
 
-	//1. Apex ê¸°ì¤€ ì§€ë©´ì„ ì°¾ëŠ”ë‹¤.
+	//1. Apex ±âÁØ Áö¸éÀ» Ã£´Â´Ù.
 	{
 		FHitResult HitResult;
 		FVector Start = GroundFromApex + FVector(0, 0, 10000);
@@ -2070,8 +2742,8 @@ void ASGCamera::GetLeftRightFairWayPos(FVector MoveDir, FVector FromLocation, FV
 
 	bool IsFind = false;
 	
-	//2. ì°¾ì€ ì§€ë©´ìœ¼ë¡œë¶€í„° Offset ë§Œí¼ ì¢Œì¸¡ìœ¼ë¡œ ì´ë™í•˜ë©´ì„œ OB ì§€ì ì„ ì°¾ëŠ”ë‹¤.
-	//TODO case 1ë²ˆì—ì„œ ê°ì§€ëœ ì§€ë©´ì´ ì´ë¯¸ OBì¸ ê²½ìš°, FairWay ì§€ì ì„ ë¨¼ì € ì°¾ê³  ê·¸ ì§€ì ì„ ê¸°ì¤€ìœ¼ë¡œ ì¢Œìš° OB êµ¬ê°„ì„ ì°¾ëŠ”ë‹¤?
+	//2. Ã£Àº Áö¸éÀ¸·ÎºÎÅÍ Offset ¸¸Å­ ÁÂÃøÀ¸·Î ÀÌµ¿ÇÏ¸é¼­ OB ÁöÁ¡À» Ã£´Â´Ù.
+	//TODO case 1¹ø¿¡¼­ °¨ÁöµÈ Áö¸éÀÌ ÀÌ¹Ì OBÀÎ °æ¿ì, FairWay ÁöÁ¡À» ¸ÕÀú Ã£°í ±× ÁöÁ¡À» ±âÁØÀ¸·Î ÁÂ¿ì OB ±¸°£À» Ã£´Â´Ù?
 	{
 		float Offset = 500;
 		
@@ -2104,7 +2776,7 @@ void ASGCamera::GetLeftRightFairWayPos(FVector MoveDir, FVector FromLocation, FV
 
 	if(!IsFind)
 	{
-		//3. ì°¾ì€ ì§€ë©´ìœ¼ë¡œë¶€í„° Offset ë§Œí¼ ìš°ì¸¡ìœ¼ë¡œ ì´ë™í•˜ë©´ì„œ FairWay ì§€ì ì„ ì°¾ëŠ”ë‹¤.
+		//3. Ã£Àº Áö¸éÀ¸·ÎºÎÅÍ Offset ¸¸Å­ ¿ìÃøÀ¸·Î ÀÌµ¿ÇÏ¸é¼­ FairWay ÁöÁ¡À» Ã£´Â´Ù.
 		{
 			float Offset = 500;
 			for(int i = 1; i <= 100; i++)
@@ -2178,11 +2850,10 @@ void ASGCamera::TraceCamZPosFix(FVector& SpringArmLoc, FVector& CameraLoc)
 		bool bIsGround = USGGroundChecker::LineTraceGroundCheck(HitResult, Start, End, this);
 		if (bIsGround)
 		{
-			// SG_LOG(Log, "SJW 222 TraceCamZPosFix case 1 !!!!");
-			CameraLoc.Z = HitResult.ImpactPoint.Z + 400;
+			CameraLoc.Z = HitResult.ImpactPoint.Z + 100;
 		}
 	}
-	//ìƒ· ì§í›„ ì§€ë©´ ì²˜ë¦¬
+	//¼¦ Á÷ÈÄ Áö¸é Ã³¸®
 	else
 	{
 		FHitResult HitResult;
@@ -2245,16 +2916,22 @@ void ASGCamera::InitBadPlaceHitCameraWork(APlayerController* Controller, ASGPlay
 
 	SG_LOG(Log, "SJW 002 InitBadPlaceHitCameraWork BallLocation %s", *BallLocation.ToString());
 
-	//ì´ì „ ì¹´ë©”ë¼ê°€ ìƒ· ì¶”ì  ì¹´ë©”ë¼ì¸ ê²½ìš°
+	//ÀÌÀü Ä«¸Ş¶ó°¡ ¼¦ ÃßÀû Ä«¸Ş¶óÀÎ °æ¿ì
 	if(BeforeApexCamNum == 2)
 	{
 		SG_LOG(Log, "SJW 002 InitBadPlaceHitCameraWork case aaa");
 		
 		TargetLocation = TraceCamera->GetCamera()->GetComponentLocation();
 	}
-	else
+	else if(BeforeApexCamNum == 3)
 	{
 		SG_LOG(Log, "SJW 002 InitBadPlaceHitCameraWork case bbb");
+		
+		TargetLocation = SkyTraceCamera->GetCamera()->GetComponentLocation();
+	}
+	else
+	{
+		SG_LOG(Log, "SJW 002 InitBadPlaceHitCameraWork case ccc");
 		
 		FVector MoveDir = BallLocation - startLocation;
 		MoveDir *= 0.8f;
@@ -2265,7 +2942,7 @@ void ASGCamera::InitBadPlaceHitCameraWork(APlayerController* Controller, ASGPlay
 		float Offset = 500;
 		bool IsFind = false;
 
-		//ì¢Œì¸¡ìœ¼ë¡œ í˜ì–´ì›¨ì´ ì˜ì—­ ì°¾ê¸°
+		//ÁÂÃøÀ¸·Î Æä¾î¿şÀÌ ¿µ¿ª Ã£±â
 		for(int i = 1; i <= 20; i++)
 		{
 			FVector NextLocation = (startLocation + MoveDir) + -1 * SideDir * i * Offset;
@@ -2293,7 +2970,7 @@ void ASGCamera::InitBadPlaceHitCameraWork(APlayerController* Controller, ASGPlay
 				break;
 		}
 
-		//ìš°ì¸¡ìœ¼ë¡œ í˜ì–´ì›¨ì´ ì˜ì—­ ì°¾ê¸°
+		//¿ìÃøÀ¸·Î Æä¾î¿şÀÌ ¿µ¿ª Ã£±â
 		if(!IsFind)
 		{
 			for(int i = 1; i <= 20; i++)
@@ -2388,7 +3065,6 @@ bool ASGCamera::IsSafeSurface(EPhysicalSurface Surface)
 
 UFirstCameraRecord* ASGCamera::GetFirstCameraRecordByIndex(int32 ID)
 {
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return nullptr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -2401,7 +3077,6 @@ UFirstCameraRecord* ASGCamera::GetFirstCameraRecordByIndex(int32 ID)
 TArray<UFirstCameraRecord*> ASGCamera::GetFirstCameraRecordsByPriority(int32 ID)
 {
 	TArray<UFirstCameraRecord*> TargetArr;
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return TargetArr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -2422,8 +3097,6 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 	bool IsDebugIndexExist = DebugFirstCameraIndex != 0;
 	if(IsDebugIndexExist)
 	{
-		SG_LOG(Log, "SJW [DebugCamera] First Camera %i", DebugFirstCameraIndex);
-		
 		return GetFirstCameraRecordByIndex(DebugFirstCameraIndex);
 	}
 #endif
@@ -2431,7 +3104,7 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 	auto TargetRecords = GetFirstCameraRecordsByPriority(Priority);
 	if(TargetRecords.Num() > 0)
 	{
-		TArray<UFirstCameraRecord*> ValidRecords;	//ì¡°ê±´ì„ ìµœì¢…ì ìœ¼ë¡œ ë§Œì¡±í•˜ëŠ” Record ê·¸ë£¹
+		TArray<UFirstCameraRecord*> ValidRecords;	//Á¶°ÇÀ» ÃÖÁ¾ÀûÀ¸·Î ¸¸Á·ÇÏ´Â Record ±×·ì
 
 		for (auto TargetRecord : TargetRecords)
 		{
@@ -2444,15 +3117,15 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 					bool TeeShotCond = TeeShot == 1;
 					if(IsTeeShot != TeeShotCond)
 					{
-						SG_LOG(Log, "SJW 333 TeeShot Condition true");
+						// SG_LOG(Log, "SJW 333 TeeShot Condition true");
 						continue;
 					}
 					
-					SG_LOG(Log, "SJW 333 TeeShot Condition false");
+					// SG_LOG(Log, "SJW 333 TeeShot Condition false");
 				}
 			}
 			
-			//1. í™€ì»µ ê´€ë ¨ ì¡°ê±´ ê²€ì‚¬
+			//1. È¦ÄÅ °ü·Ã Á¶°Ç °Ë»ç
 			{
 				float HoleDistanceMin = TargetRecord->Hole_Start_Distance_Min;
 				float HoleDistanceMax = TargetRecord->Hole_Start_Distance_Max;
@@ -2468,7 +3141,7 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 				}
 			}
 
-			//2. ë³¼ íŒŒì›Œ ì¡°ê±´ ê²€ì‚¬
+			//2. º¼ ÆÄ¿ö Á¶°Ç °Ë»ç
 			{
 				float BallPowerMin = TargetRecord->Ball_Power_Min;
 				float BallPowerMax = TargetRecord->Ball_Power_Max;
@@ -2484,7 +3157,7 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 				}
 			}
 
-			//3. ë°œì‚¬ê° ì¡°ê±´ ê²€ì‚¬
+			//3. ¹ß»ç°¢ Á¶°Ç °Ë»ç
 			{
 				float LaunchDegreeMin = TargetRecord->Launch_Degree_Min;
 				float LaunchDegreeMax = TargetRecord->Launch_Degree_Max;
@@ -2500,31 +3173,31 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 				}
 			}
 
-			//4. í™•ë¥  0ì¸ ê²ƒ ì œì™¸
+			//4. È®·ü 0ÀÎ °Í Á¦¿Ü
 			{
 				float TargetActiveRate = TargetRecord->Camera_Active_Rate;
 				if(fabs(TargetActiveRate) <= EPSILON) {	continue; }
 			}
 
-			//ì¡°ê±´ì„ ëª¨ë‘ ë§Œì¡±í•˜ëŠ” ê²½ìš°
+			//Á¶°ÇÀ» ¸ğµÎ ¸¸Á·ÇÏ´Â °æ¿ì
 			ValidRecords.Add(TargetRecord);
 		}
 
-		//ì¡°ê±´ì„ ë§Œì¡±í•˜ëŠ” ê·¸ë£¹ì´ ì—†ëŠ” ê²½ìš° ë‹¤ìŒ ìš°ì„ ìˆœìœ„ ì§„í–‰
+		//Á¶°ÇÀ» ¸¸Á·ÇÏ´Â ±×·ìÀÌ ¾ø´Â °æ¿ì ´ÙÀ½ ¿ì¼±¼øÀ§ ÁøÇà
 		if(ValidRecords.Num() == 0)
 		{
-			SG_LOG(Log, "GetTargetFirstCameraPriority NextPriority Case a...");
+			// SG_LOG(Log, "GetTargetFirstCameraPriority NextPriority Case a...");
 			
 			Priority += 1;
 			return GetTargetFirstCameraPriority(Priority, Player);
 		}
 		
-		//í™•ë¥  í…Œì´ë¸” ì„¸íŒ…
+		//È®·ü Å×ÀÌºí ¼¼ÆÃ
 		TArray<PercentageData> PercentageDatas;
 		PercentageData* mPercentageData = new PercentageData(1, ValidRecords[0]->Camera_Active_Rate);
 		PercentageDatas.Add(*mPercentageData);
 
-		//í•´ë‹¹ë˜ëŠ” Recordê°€ 2ê°œ ì´ìƒì¸ ê²½ìš°
+		//ÇØ´çµÇ´Â Record°¡ 2°³ ÀÌ»óÀÎ °æ¿ì
 		if(ValidRecords.Num() > 1)
 		{
 			for(int i = 1; i < ValidRecords.Num(); i++)
@@ -2533,11 +3206,11 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 				PercentageDatas.Add(*mPercentageData);
 			}
 		}
-		//~í™•ë¥  í…Œì´ë¸” ì„¸íŒ…
+		//~È®·ü Å×ÀÌºí ¼¼ÆÃ
 		
 		UFirstCameraRecord* TargetRecord = nullptr;
 
-		//4. ì¡°ê±´ì„ ë§Œì¡±í•˜ëŠ” ê·¸ë£¹ì—ì„œ í™•ë¥ ì„ ê¸°ë°˜ìœ¼ë¡œ ë¬´ì‘ìœ„ Recordë¥¼ ì¶”ì¶œí•œë‹¤.
+		//4. Á¶°ÇÀ» ¸¸Á·ÇÏ´Â ±×·ì¿¡¼­ È®·üÀ» ±â¹İÀ¸·Î ¹«ÀÛÀ§ Record¸¦ ÃßÃâÇÑ´Ù.
 		int RndResult = FMath::RandRange(1, 100);
 		for(int i = 0; i < PercentageDatas.Num(); i++)
 		{
@@ -2549,21 +3222,21 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 
 		if(TargetRecord == nullptr)
 		{
-			SG_LOG(Log, "GetTargetFirstCameraPriority NextPriority Case b...");
+			// SG_LOG(Log, "GetTargetFirstCameraPriority NextPriority Case b...");
 			
 			Priority += 1;
 			return GetTargetFirstCameraPriority(Priority, Player);
 		}
 
-		if(IsValid(TargetRecord))
-		{
-			SG_LOG(Log, "SJW 111 Selected FirstCameraPriority Index %i, Priority %i", TargetRecord->Index, Priority);
-		}
+		// if(IsValid(TargetRecord))
+		// {
+		// 	SG_LOG(Log, "SJW 111 Selected FirstCameraPriority Index %i, Priority %i", TargetRecord->Index, Priority);
+		// }
 
 		return TargetRecord;
 	}
 	
-	SG_LOG(Log, "GetTargetFirstCameraPriority Exception Case...");
+	// SG_LOG(Log, "GetTargetFirstCameraPriority Exception Case...");
 	return nullptr;
 }
 
@@ -2583,18 +3256,18 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 	auto TargetRecords = GetSecondCameraRecordsByPriority(Priority);
 	if(TargetRecords.Num() > 0)
 	{
-		TArray<USecondCameraRecord*> ValidRecords;	//ì¡°ê±´ì„ ìµœì¢…ì ìœ¼ë¡œ ë§Œì¡±í•˜ëŠ” Record ê·¸ë£¹
+		TArray<USecondCameraRecord*> ValidRecords;	//Á¶°ÇÀ» ÃÖÁ¾ÀûÀ¸·Î ¸¸Á·ÇÏ´Â Record ±×·ì
 
 		for (auto TargetRecord : TargetRecords)
 		{
-			//1. ì‹œì‘ ì¹´ë©”ë¼ ì¡°ê±´ ê²€ì‚¬
+			//1. ½ÃÀÛ Ä«¸Ş¶ó Á¶°Ç °Ë»ç
 			{
 				FString FirstCamera = TargetRecord->First_Camera;
 				int32 TargetConditionFirstCameraNum = GetBeforeApexCamNumFromStringValue(FirstCamera);
 				if(TargetConditionFirstCameraNum != BeforeApexCamNum) { continue; }
 			}
 
-			//2. í‹°ìƒ· ì—¬ë¶€
+			//2. Æ¼¼¦ ¿©ºÎ
 			{
 				int32 TeeShotCond = TargetRecord->Tee_Shot;
 				bool TeeShotCondExist = TeeShotCond != -1;
@@ -2611,7 +3284,7 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 				}
 			}
 
-			//3. ë³¼ íŒŒì›Œ ì¡°ê±´ ê²€ì‚¬
+			//3. º¼ ÆÄ¿ö Á¶°Ç °Ë»ç
 			{
 				int32 BallPowerMinCond = TargetRecord->Ball_Power_Min;
 				int32 BallPowerMaxCond = TargetRecord->Ball_Power_Max;
@@ -2627,7 +3300,7 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 				}
 			}
 
-			//4. ë°œì‚¬ê° ì¡°ê±´ ê²€ì‚¬
+			//4. ¹ß»ç°¢ Á¶°Ç °Ë»ç
 			{
 				int32 LaunchDegreeMinCond = TargetRecord->Launch_Degree_Min;
 				int32 LaunchDegreeMaxCond = TargetRecord->Launch_Degree_Max;
@@ -2643,7 +3316,7 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 				}
 			}
 
-			//5. ë‚™êµ¬ ì˜ˆì¸¡ ì§€ì  ì§€í˜• ì¡°ê±´ ê²€ì‚¬
+			//5. ³«±¸ ¿¹Ãø ÁöÁ¡ ÁöÇü Á¶°Ç °Ë»ç
 			{
 				bool NeedTerrainCheck = false;
 				TArray<int32> StopTerrains = TargetRecord->Stop_Terrain;
@@ -2687,7 +3360,7 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 				}
 			}
 
-			//6. Apex ì§€ì  ì¡°ê±´ ê²€ì‚¬
+			//6. Apex ÁöÁ¡ Á¶°Ç °Ë»ç
 			{
 				// float ApexHeightMinCond = TargetRecord->Apex_Height_Min;
 				// float ApexHeightMaxCond = TargetRecord->Apex_Height_Max;
@@ -2697,11 +3370,11 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 				// }
 			}
 
-			//ì¡°ê±´ì„ ëª¨ë‘ ë§Œì¡±í•˜ëŠ” ê²½ìš°
+			//Á¶°ÇÀ» ¸ğµÎ ¸¸Á·ÇÏ´Â °æ¿ì
 			ValidRecords.Add(TargetRecord);
 		}
 
-		//ì¡°ê±´ì„ ë§Œì¡±í•˜ëŠ” ê·¸ë£¹ì´ ì—†ëŠ” ê²½ìš° ë‹¤ìŒ ìš°ì„ ìˆœìœ„ ì§„í–‰
+		//Á¶°ÇÀ» ¸¸Á·ÇÏ´Â ±×·ìÀÌ ¾ø´Â °æ¿ì ´ÙÀ½ ¿ì¼±¼øÀ§ ÁøÇà
 		if(ValidRecords.Num() == 0)
 		{
 			// SG_LOG(Log, "GetTargetSecondCameraPriority NextPriority Case a...");
@@ -2710,12 +3383,12 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 			return GetTargetSecondCameraPriority(Priority, Player);
 		}
 		
-		//í™•ë¥  í…Œì´ë¸” ì„¸íŒ…
+		//È®·ü Å×ÀÌºí ¼¼ÆÃ
 		TArray<PercentageData> PercentageDatas;
 		PercentageData* mPercentageData = new PercentageData(1, ValidRecords[0]->Camera_Active_Rate);
 		PercentageDatas.Add(*mPercentageData);
 
-		//í•´ë‹¹ë˜ëŠ” Recordê°€ 2ê°œ ì´ìƒì¸ ê²½ìš°
+		//ÇØ´çµÇ´Â Record°¡ 2°³ ÀÌ»óÀÎ °æ¿ì
 		if(ValidRecords.Num() > 1)
 		{
 			for(int i = 1; i < ValidRecords.Num(); i++)
@@ -2724,11 +3397,11 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 				PercentageDatas.Add(*mPercentageData);
 			}
 		}
-		//~í™•ë¥  í…Œì´ë¸” ì„¸íŒ…
+		//~È®·ü Å×ÀÌºí ¼¼ÆÃ
 		
 		USecondCameraRecord* TargetRecord = nullptr;
 
-		//4. ì¡°ê±´ì„ ë§Œì¡±í•˜ëŠ” ê·¸ë£¹ì—ì„œ í™•ë¥ ì„ ê¸°ë°˜ìœ¼ë¡œ ë¬´ì‘ìœ„ Recordë¥¼ ì¶”ì¶œí•œë‹¤.
+		//4. Á¶°ÇÀ» ¸¸Á·ÇÏ´Â ±×·ì¿¡¼­ È®·üÀ» ±â¹İÀ¸·Î ¹«ÀÛÀ§ Record¸¦ ÃßÃâÇÑ´Ù.
 		int RndResult = FMath::RandRange(1, 100);
 		for(int i = 0; i < PercentageDatas.Num(); i++)
 		{
@@ -2755,7 +3428,7 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 		return TargetRecord;
 	}
 
-	//ë‹¤ìŒ ìš°ì„ ìˆœìœ„ê°€ ë¹„ì–´ìˆëŠ” ê²½ìš°(ì—°ì†ì ì´ì§€ ì•Šì€ ê²½ìš°)ì— ëŒ€í•œ ì˜ˆì™¸ì²˜ë¦¬
+	//´ÙÀ½ ¿ì¼±¼øÀ§°¡ ºñ¾îÀÖ´Â °æ¿ì(¿¬¼ÓÀûÀÌÁö ¾ÊÀº °æ¿ì)¿¡ ´ëÇÑ ¿¹¿ÜÃ³¸®
 	if((TargetRecords.Num() == 0) && (Priority < GetLastSecondCameraRecord()->Priority))
 	{
 		Priority += 1;
@@ -2769,7 +3442,6 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 TArray<USecondCameraRecord*> ASGCamera::GetSecondCameraRecordsByPriority(int32 ID)
 {
 	TArray<USecondCameraRecord*> TargetArr;
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return TargetArr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -2781,7 +3453,6 @@ TArray<USecondCameraRecord*> ASGCamera::GetSecondCameraRecordsByPriority(int32 I
 
 USecondCameraRecord* ASGCamera::GetLastSecondCameraRecord()
 {
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return nullptr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -2790,12 +3461,12 @@ USecondCameraRecord* ASGCamera::GetLastSecondCameraRecord()
 	return CameraTable->m_SecondCameraSheet->arrayTable.Last();
 }
 
-
 int32 ASGCamera::GetBeforeApexCamNumFromStringValue(FString TargetValue)
 {
 	TargetValue = TargetValue.ToLower();
 	if(TargetValue == TEXT("shot_fixed")) {	return 1; }
 	if(TargetValue == TEXT("shot_follow")) { return 2; }
+	if(TargetValue == TEXT("sky_follow")) { return 3; }
 	
 	return 2;
 }
@@ -2806,6 +3477,8 @@ int32 ASGCamera::GetAfterApexCamNumFromStringValue(FString TargetValue)
 	if(TargetValue == TEXT("side_fixed")){ return 2; }
 	if(TargetValue == TEXT("land_fixed")){ return 1; }
 	if(TargetValue == TEXT("shot_follow")){ return 3; }
+	if(TargetValue == TEXT("sky_follow")){ return 6; }
+	if(TargetValue == TEXT("shot_fixed")){ return 7; }
 
 	return 3;
 }
@@ -2815,7 +3488,6 @@ bool ASGCamera::IsAvailableThirdCamera(APlayerController* Controller, ASGPlayerC
 	if(!IsValid(SelectedSecondCameraRecord)) return false;
 
 	FString SecondCameraStr = SelectedSecondCameraRecord->Camera_Result.ToLower();
-	int32 RecordApexCamNum = GetAfterApexCamNumFromStringValue(SecondCameraStr);
 	
 	int32 LandCameraActiveCond = SelectedSecondCameraRecord->Third_Camera_Active;
 	
@@ -2861,7 +3533,6 @@ ASGCamera::PercentageData::PercentageData(int32 mMin, int32 mMax)
 
 UPuttCameraRecord* ASGCamera::GetLastPuttingCameraRecord()
 {
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return nullptr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -2875,13 +3546,13 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 	auto TargetRecords = GetPuttingCameraRecordsByPriority(Priority);
 	if(TargetRecords.Num() > 0)
 	{
-		TArray<UPuttCameraRecord*> ValidRecords;	//ì¡°ê±´ì„ ìµœì¢…ì ìœ¼ë¡œ ë§Œì¡±í•˜ëŠ” Record ê·¸ë£¹
+		TArray<UPuttCameraRecord*> ValidRecords;	//Á¶°ÇÀ» ÃÖÁ¾ÀûÀ¸·Î ¸¸Á·ÇÏ´Â Record ±×·ì
 
 		FVector BallLocation = Player->GetActorLocation();
 		
 		for (auto TargetRecord : TargetRecords)
 		{
-			//1. í™€ì»µ ì‹œì‘ ê±°ë¦¬ ìµœì†Œ ê±°ë¦¬ ì¡°ê±´
+			//1. È¦ÄÅ ½ÃÀÛ °Å¸® ÃÖ¼Ò °Å¸® Á¶°Ç
 			{
 				float HoleStartDistMinCond = TargetRecord->Hole_Start_Distance_Min;
 				float HoleStartDistMaxCond = TargetRecord->Hole_Start_Distance_Max;
@@ -2899,7 +3570,7 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 				}
 			}
 
-			//2. ì˜ˆìƒ ê³µ ë©ˆì¶”ëŠ” ì§€ì ì— ëŒ€í•œ ì¡°ê±´
+			//2. ¿¹»ó °ø ¸ØÃß´Â ÁöÁ¡¿¡ ´ëÇÑ Á¶°Ç
 			{
 				ASGPuttingGuide* PuttingGuide = Player->GetPuttingGuideActor();
 				if (IsValid(PuttingGuide))
@@ -2911,11 +3582,11 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 					float PredictDist = PuttingGuide->CalculatePredictDist(ballPower, TargetHeight);
 					predictPuttingPosition = BallLocation + Player->GetActorForwardVector().GetSafeNormal() * PredictDist;
 
-					SG_LOG(Log, "SJW 111 Predicted After Putting Location : %s", *predictPuttingPosition.ToString());
+					// SG_LOG(Log, "SJW 111 Predicted After Putting Location : %s", *predictPuttingPosition.ToString());
 					
 					float DistPredictedLocToHole = FVector::Dist2D(predictPuttingPosition, holecupLocation);
 					
-					SG_LOG(Log, "SJW 111 DistPredictedLocToHole %f", DistPredictedLocToHole);
+					// SG_LOG(Log, "SJW 111 DistPredictedLocToHole %f", DistPredictedLocToHole);
 					
 					if(HoleStopDistMinCond != -1)
 					{
@@ -2929,11 +3600,11 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 				}
 			}
 
-			//ì¡°ê±´ì„ ëª¨ë‘ ë§Œì¡±í•˜ëŠ” ê²½ìš°
+			//Á¶°ÇÀ» ¸ğµÎ ¸¸Á·ÇÏ´Â °æ¿ì
 			ValidRecords.Add(TargetRecord);
 		}
 
-		//ì¡°ê±´ì„ ë§Œì¡±í•˜ëŠ” ê·¸ë£¹ì´ ì—†ëŠ” ê²½ìš° ë‹¤ìŒ ìš°ì„ ìˆœìœ„ ì§„í–‰
+		//Á¶°ÇÀ» ¸¸Á·ÇÏ´Â ±×·ìÀÌ ¾ø´Â °æ¿ì ´ÙÀ½ ¿ì¼±¼øÀ§ ÁøÇà
 		if(ValidRecords.Num() == 0)
 		{
 			// SG_LOG(Log, "GetTargetPuttingCameraRecordByPriority NextPriority Case a...");
@@ -2942,12 +3613,12 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 			return GetTargetPuttingCameraRecordByPriority(Priority, Player);
 		}
 		
-		//í™•ë¥  í…Œì´ë¸” ì„¸íŒ…
+		//È®·ü Å×ÀÌºí ¼¼ÆÃ
 		TArray<PercentageData> PercentageDatas;
 		PercentageData* mPercentageData = new PercentageData(1, ValidRecords[0]->Camera_Active_Rate);
 		PercentageDatas.Add(*mPercentageData);
 
-		//í•´ë‹¹ë˜ëŠ” Recordê°€ 2ê°œ ì´ìƒì¸ ê²½ìš°
+		//ÇØ´çµÇ´Â Record°¡ 2°³ ÀÌ»óÀÎ °æ¿ì
 		if(ValidRecords.Num() > 1)
 		{
 			for(int i = 1; i < ValidRecords.Num(); i++)
@@ -2956,11 +3627,11 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 				PercentageDatas.Add(*mPercentageData);
 			}
 		}
-		//~í™•ë¥  í…Œì´ë¸” ì„¸íŒ…
+		//~È®·ü Å×ÀÌºí ¼¼ÆÃ
 		
 		UPuttCameraRecord* TargetRecord = nullptr;
 
-		//4. ì¡°ê±´ì„ ë§Œì¡±í•˜ëŠ” ê·¸ë£¹ì—ì„œ í™•ë¥ ì„ ê¸°ë°˜ìœ¼ë¡œ ë¬´ì‘ìœ„ Recordë¥¼ ì¶”ì¶œí•œë‹¤.
+		//4. Á¶°ÇÀ» ¸¸Á·ÇÏ´Â ±×·ì¿¡¼­ È®·üÀ» ±â¹İÀ¸·Î ¹«ÀÛÀ§ Record¸¦ ÃßÃâÇÑ´Ù.
 		int RndResult = FMath::RandRange(1, 100);
 		for(int i = 0; i < PercentageDatas.Num(); i++)
 		{
@@ -2973,21 +3644,21 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 
 		if(TargetRecord == nullptr)
 		{
-			SG_LOG(Log, "GetTargetPuttingCameraRecordByPriority NextPriority Case b...");
+			// SG_LOG(Log, "GetTargetPuttingCameraRecordByPriority NextPriority Case b...");
 			
 			Priority += 1;
 			return GetTargetPuttingCameraRecordByPriority(Priority, Player);
 		}
 
-		if(IsValid(TargetRecord))
-		{
-			SG_LOG(Log, "SJW 111 Selected PuttingRecord Index %i, Priority %i", TargetRecord->Index, Priority);
-		}
+		// if(IsValid(TargetRecord))
+		// {
+		// 	SG_LOG(Log, "SJW 111 Selected PuttingRecord Index %i, Priority %i", TargetRecord->Index, Priority);
+		// }
 		
 		return TargetRecord;
 	}
 
-	//ë‹¤ìŒ ìš°ì„ ìˆœìœ„ê°€ ë¹„ì–´ìˆëŠ” ê²½ìš°(ì—°ì†ì ì´ì§€ ì•Šì€ ê²½ìš°)ì— ëŒ€í•œ ì˜ˆì™¸ì²˜ë¦¬
+	//´ÙÀ½ ¿ì¼±¼øÀ§°¡ ºñ¾îÀÖ´Â °æ¿ì(¿¬¼ÓÀûÀÌÁö ¾ÊÀº °æ¿ì)¿¡ ´ëÇÑ ¿¹¿ÜÃ³¸®
 	if((TargetRecords.Num() == 0) && (Priority < GetLastPuttingCameraRecord()->Priority))
 	{
 		Priority += 1;
@@ -3001,7 +3672,6 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByPriority(int32 Prior
 TArray<UPuttCameraRecord*> ASGCamera::GetPuttingCameraRecordsByPriority(int32 ID)
 {
 	TArray<UPuttCameraRecord*> TargetArr;
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return TargetArr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -3022,36 +3692,35 @@ int32 ASGCamera::GetPuttingCamNumFromStringValue(FString TargetValue)
 
 void ASGCamera::ActiveEndShotWaitCamera()
 {
-	SG_LOG(Log, "SJW 333 ActiveEndShotWaitCamera.......");
+	// SG_LOG(Log, "SJW 333 ActiveEndShotWaitCamera.......");
+
+	//SkyTrace Ä«¸Ş¶óÀÎ °æ¿ì ActiveEndShotWaitCamera »ç¿ë x
+	if(AfterApexCamNum == 6) return;
 	
 	EndShotWaitCameraNeed = true;
 
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr == GameInst) return;
-
-	APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
-	if (nullptr == Controller) return;
-
-	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(Controller->GetCharacter());
-	if (nullptr == Player) return;
+	if (nullptr == PlayerController) return;
+	if (nullptr == PlayerChar) return;
 	
-	float BallToHoleDist = FVector::Dist2D(holecupLocation, Player->GetActorLocation());
+	if(PlayerController->GetViewTarget() == EndShotWaitCamera) return;
+	
+	float BallToHoleDist = FVector::Dist2D(holecupLocation, PlayerChar->GetActorLocation());
 	if(BallToHoleDist < 20) return;
 	
-	FVector EndShotWaitCameraLocation = Controller->PlayerCameraManager->GetCameraLocation();
-	FRotator EndShotWaitCameraRotator = Controller->PlayerCameraManager->GetCameraRotation();
+	FVector EndShotWaitCameraLocation = PlayerController->PlayerCameraManager->GetCameraLocation();
+	FRotator EndShotWaitCameraRotator = PlayerController->PlayerCameraManager->GetCameraRotation();
 
-	float FOV = Controller->PlayerCameraManager->GetFOVAngle();
+	float FOV = PlayerController->PlayerCameraManager->GetFOVAngle();
 	EndShotWaitCamera->GetCamera()->FieldOfView = FOV;
 	EndShotWaitCamera->GetCamera()->SetWorldLocation(EndShotWaitCameraLocation);
 	EndShotWaitCamera->GetCamera()->SetWorldRotation(EndShotWaitCameraRotator);
 	
-	Controller->SetViewTarget(EndShotWaitCamera);
+	PlayerController->SetViewTarget(EndShotWaitCamera);
 }
 
 UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByIndex(int32 Index)
 {
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return nullptr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -3063,7 +3732,6 @@ UPuttCameraRecord* ASGCamera::GetTargetPuttingCameraRecordByIndex(int32 Index)
 
 USecondCameraRecord* ASGCamera::GetSecondCameraRecordByIndex(int32 ID)
 {
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(nullptr == GameInst) return nullptr;
 
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
@@ -3073,7 +3741,84 @@ USecondCameraRecord* ASGCamera::GetSecondCameraRecordByIndex(int32 ID)
 	return TargetRecord;
 }
 
-//í˜„ì¬ ê³µì´ í™”ë©´ ê°€ì¥ìë¦¬ì— ìˆëŠ” ìƒíƒœì¸ê°€?
+TArray<UReadyCameraRecord*> ASGCamera::GetAllReadyCameraRecords()
+{
+	TArray<UReadyCameraRecord*> TargetArr;
+	if(nullptr == GameInst) return TargetArr;
+
+	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
+	if(nullptr == CameraTable) return TargetArr;
+
+	TargetArr = GameInst->GetTableManager()->GetAllReadyCameraRecords();
+	return TargetArr;
+}
+
+UReadyCameraRecord* ASGCamera::GetTargetReadyCameraRecord(ASGPlayerCharacter* Player, bool mIsTeeShot)
+{
+	auto TargetRecords = GetAllReadyCameraRecords();
+	
+	if(TargetRecords.Num() > 0)
+	{
+		for (auto ItemRecord : TargetRecords)
+		{
+			float CurrentHoleCupDist = FVector::Dist2D(Player->GetActorLocation(), Player->CharacterComponent->GetPinPos());
+
+			//1. Æ¼¼¦ Á¶°Ç °Ë»ç
+			{
+				int32 TeeShot = ItemRecord->Tee_Shot;
+				if(TeeShot != -1)
+				{
+					bool TeeShotCond = TeeShot == 1;
+					if(mIsTeeShot != TeeShotCond) { continue; }
+				}
+			}
+
+			//2. ÆÛÆÃ ¿©ºÎ Á¶°Ç °Ë»ç
+			{
+				int32 Putt = ItemRecord->Putt;
+				if(Putt != -1)
+				{
+					bool IsApronOrGreen = Player->IsOnApronORGreenWithStayMeterType();
+					bool PuttCond = Putt == 1;
+					if(IsApronOrGreen != PuttCond) { continue; }
+				}
+			}
+			
+			//3. È¦ÄÅ °Å¸® Á¶°Ç °Ë»ç
+			{
+				float HoleDistanceMin = ItemRecord->Hole_Start_Distance_Min;
+				float HoleDistanceMax = ItemRecord->Hole_Start_Distance_Max;
+			
+				if(HoleDistanceMin != -1)
+				{
+					if(CurrentHoleCupDist < HoleDistanceMin) { continue; }
+				}
+
+				if(HoleDistanceMax != -1)
+				{
+					if(CurrentHoleCupDist > HoleDistanceMax) { continue; } 
+				}
+			}
+
+			return ItemRecord;
+		}
+	}
+	
+	SG_LOG(Log, "GetTargetFirstCameraPriority Exception Case...");
+	return nullptr;
+}
+
+UReadyCameraRecord* ASGCamera::GetLastReadyCameraRecord()
+{
+	if(nullptr == GameInst) return nullptr;
+
+	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
+	if(nullptr == CameraTable) return nullptr;
+
+	return CameraTable->m_ReadyCameraSheet->arrayTable.Last();
+}
+
+//ÇöÀç °øÀÌ È­¸é °¡ÀåÀÚ¸®¿¡ ÀÖ´Â »óÅÂÀÎ°¡?
 bool ASGCamera::CheckUnSafeScreenArea(int32 CurrentScreenY, bool& UpperUnSafe, bool& BottomUnsafe)
 {
 	float TargetRatio = 0;
@@ -3092,15 +3837,26 @@ bool ASGCamera::CheckUnSafeScreenArea(int32 CurrentScreenY, bool& UpperUnSafe, b
 		TargetRatio = 0.3f;
 	}
 	
-	if((ballPower >= 4000) && (ballPower < 6000))
+	if(ballPower >= 4000)
 	{
-		TargetRatio = 0.2f;
+		TargetRatio = 0.8f;
 	}
+
+	float UpperLimit = ScreenSize.Y * (1 - TargetRatio);
+	float BottomLimit = ScreenSize.Y * TargetRatio;
+
+	bool IsInSafeArea = (CurrentScreenY > UpperLimit) && (CurrentScreenY < BottomLimit);
+
+	UpperUnSafe = CurrentScreenY <= UpperLimit;
+	BottomUnsafe = CurrentScreenY >= BottomLimit;
 	
-	if(ballPower >= 6000)
-	{
-		TargetRatio = 0.1f;
-	}
+	return !IsInSafeArea;
+}
+
+bool ASGCamera::CheckSkyTraceVerticalUnSafeScreenArea(int32 CurrentScreenY, bool& UpperUnSafe, bool& BottomUnsafe)
+{
+	float TargetRatio = 0.2f;
+	if(IsBallImpacted && IsPredictGreenLanding){ TargetRatio = 0.1f; }
 
 	float UpperLimit = ScreenSize.Y * TargetRatio;
 	float BottomLimit = ScreenSize.Y * (1 - TargetRatio);
@@ -3109,32 +3865,68 @@ bool ASGCamera::CheckUnSafeScreenArea(int32 CurrentScreenY, bool& UpperUnSafe, b
 
 	UpperUnSafe = CurrentScreenY <= UpperLimit;
 	BottomUnsafe = CurrentScreenY >= BottomLimit;
-	
+
+	// SG_LOG(Log, "SJW 777 ScreenSize Y %f", ScreenSize.Y);
 	// SG_LOG(Log, "SJW 777 CurrentScreenY %i, UpperLimit %f, BottomLimit %f", CurrentScreenY, UpperLimit, BottomLimit);
 	
 	return !IsInSafeArea;
 }
 
+bool ASGCamera::CheckSkyTraceHorizontalUnSafeScreenArea(int32 CurrentScreenX, bool& LeftUnSafe, bool& RightUnsafe)
+{
+	float RightLimit = ScreenSize.X * TargetHorizontalSafeAreaRatio;
+	float LeftLimit = ScreenSize.X * (1 - TargetHorizontalSafeAreaRatio);
+
+	bool IsInSafeArea = (CurrentScreenX < RightLimit) && (CurrentScreenX > LeftLimit);
+
+	LeftUnSafe = CurrentScreenX <= LeftLimit;
+	RightUnsafe = CurrentScreenX >= RightLimit;
+
+	// if(IsInSafeArea == false)
+	// {
+	// 	SG_LOG(Log, "SJW 777 ScreenSize X %f", ScreenSize.X);
+	// 	SG_LOG(Log, "SJW 777 CurrentScreenX %i, LeftLimit %f, RightLimit %f", CurrentScreenX, LeftLimit, RightLimit);
+	// }
+	return !IsInSafeArea;
+}
+
+
+bool ASGCamera::CheckSkyTraceOutOfScreen(APlayerController* Controller, FVector2d CurrentScreenPosition)
+{
+	int32 ScreenX, ScreenY;
+	Controller->GetViewportSize(ScreenX, ScreenY);
+
+	// SG_LOG(Log, "CheckSkyTraceOutOfScreen CurrentScreenPosition %s ScreenX %i ScreenY %i", *CurrentScreenPosition.ToString(), ScreenX, ScreenY);
+
+	if (CurrentScreenPosition.X <= EPSILON || CurrentScreenPosition.X > ScreenX || CurrentScreenPosition.Y <= EPSILON || CurrentScreenPosition.Y > ScreenY)
+	{
+		return true;  // È­¸é ¹Û
+	}
+	
+	return false;		//È­¸é ¾È
+}
+
+
+
 void ASGCamera::ChangeCameraShiftSettings(float TargetShiftRotateAngle) 
 {
-	//ë¹„ìœ¨ë¡œ ShiftLeftAmount ê°’ì„ ì°¾ëŠ”ë‹¤. [15ë„ì¼ ë•Œ 100]
+	//ºñÀ²·Î ShiftLeftAmount °ªÀ» Ã£´Â´Ù. [15µµÀÏ ¶§ 100]
 	ShiftLeftAmount = 15.0f / (TargetShiftRotateAngle * 100.0f);
 
-	USGGameInstance* GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
+	GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr == GameInst) return;
 
-	APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
-	if (nullptr == Controller) return;
+	PlayerController = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
+	if (nullptr == PlayerController) return;
 
-	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(Controller->GetCharacter());
-	if (nullptr == Player) return;
+	PlayerChar = Cast<ASGPlayerCharacter>(PlayerController->GetCharacter());
+	if (nullptr == PlayerChar) return;
 
-	ASGCourseMode* const CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
 	bool IsCourseMode = IsValid(CourseMode);
 	
 	ShiftRotateAngle = TargetShiftRotateAngle;
-	Player->FollowCameraFixed();
-	Player->UpdateCameraFieldOfView();
+	PlayerChar->FollowCameraFixed();
+	PlayerChar->UpdateCameraFieldOfView();
 	
 	if(ShiftRotateAngle == 0)
 	{
@@ -3146,8 +3938,8 @@ void ASGCamera::ChangeCameraShiftSettings(float TargetShiftRotateAngle)
 		
 		if(IsCourseMode)
 		{
-			bool bIsTeeShot = SHOT_DATA_MANAGER->GetIsTeeShot(Player->GetUniqID());
-			bool IsApronOrGreen = Player->IsOnApronORGreenWithStayMeterType();
+			bool bIsTeeShot = SHOT_DATA_MANAGER->GetIsTeeShot(PlayerChar->GetUniqID());
+			bool IsApronOrGreen = PlayerChar->IsOnApronORGreenWithStayMeterType();
 			
 			if(!bIsTeeShot && IsApronOrGreen)
 			{
@@ -3161,5 +3953,524 @@ void ASGCamera::ChangeCameraShiftSettings(float TargetShiftRotateAngle)
 		}
 		
 		TraceCamera->GetSpringArm()->SetRelativeRotation(FRotator(0, -1 * (ShiftRotateAngle + OffSetAngle), 0));
+	}
+}
+
+float ASGCamera::EaseIn(float t)
+{
+	return t * t;
+}
+
+void ASGCamera::InitSkyTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player)
+{
+	if(IsInitTraceCamera) return;
+	IsInitTraceCamera = true;
+	
+	FVector BallLocation = Player->GetActorLocation();
+
+	FRotator SpringArmTargetRotation = Player->GetCameraBoom()->GetTargetRotation();
+	SpringArmTargetRotation.Yaw += ShiftRotateAngle;
+	// FVector FollowCameraSocketOffset = Player->GetCameraBoom()->SocketOffset;
+	SkyTraceCamera->GetCamera()->FieldOfView = Player->GetFollowCamera()->FieldOfView;
+	
+	// float OffSetShiftRotateAngle = 0.0f;
+	// if(!IsTeeShot){ OffSetShiftRotateAngle = ShiftSecondShotOffSetAngle; }
+	
+	// FVector CamToBallDirVector = Player->GetActorLocation() - Player->GetCamera()->GetComponentLocation();
+	// FVector ShiftedCamToBallDirVector = CamToBallDirVector.RotateAngleAxis(ShiftRotateAngle, FVector::ZAxisVector);
+	// ShiftedCamToBallDirVector.Z = 0;
+	// FRotator TargetRot = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
+	
+	float BackwardLength = 300;
+	
+	FVector FollowCameraLoc = ((BallLocation - Player->GetActorForwardVector() * BackwardLength));
+	GroundCheck(FollowCameraLoc, FollowCameraLoc);
+	
+	SkyTraceCamera->GetCamera()->FieldOfView = Player->GetFollowCamera()->FieldOfView + 10;
+	
+	SkyTraceCamera->GetCamera()->SetUsingAbsoluteLocation(true);
+	SkyTraceCamera->GetCamera()->SetWorldLocation(FollowCameraLoc);
+	
+	SkyTraceCamera->GetCamera()->SetUsingAbsoluteRotation(true);
+	SkyTraceCamera->GetCamera()->SetWorldRotation(SpringArmTargetRotation);
+
+	ASGBaseGameMode* const GameMode = GetWorld()->GetAuthGameMode<ASGBaseGameMode>();
+	CameraRailActor = GameMode->GetCameraRail();
+	if(IsValid(CameraRailActor))
+	{
+		CameraRailActor->UpdateCameraDirector(this);
+		CameraRailActor->UpdatePlayer(Player);
+		CameraRailActor->UpdateImpactedVector(BallForwardVectorAfterImpact);
+		CameraRailActor->UpdateWindVector(WindVector);
+
+		USGUserData* const playerData = DATA_CENTER->FindUserData(Player->GetUniqID());
+		bool IsRightShift = playerData->HandIndex == 1;
+		CameraRailActor->UpdatePlateInfo(IsRightShift);
+		
+		CameraRailActor->BeginTrace();
+	}
+
+	Controller->SetViewTarget(SkyTraceCamera);
+}
+
+void ASGCamera::SkyTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
+{
+	if(flyingTime < 0.3f) return;
+	if(CameraRailActor == nullptr) return;
+
+	// SG_LOG(Log, "SkyTraceCameraWork DeltaTime : %f", DeltaTime);
+
+	bool UpperUnSafe = false;
+	bool BottomUnsafe = false;
+
+	FVector2D ViewportSize;
+	GetWorld()->GetGameViewport()->GetViewportSize(ViewportSize);
+	
+	FVector2D BallScreenPosition;
+	Controller->ProjectWorldLocationToScreen(Player->GetActorLocation(), BallScreenPosition);
+	CheckSkyTraceVerticalUnSafeScreenArea(FMath::Abs(BallScreenPosition.Y), UpperUnSafe, BottomUnsafe);
+
+	FVector CurrentCameraLocation = SkyTraceCamera->GetCamera()->GetComponentLocation();
+	FVector CameraToBallVector = Player->GetActorLocation() - CurrentCameraLocation;
+	
+	FVector CamForwardVector2d = SkyTraceCamera->GetCamera()->GetForwardVector().GetSafeNormal();
+	float CameraToBallDist = FVector::Dist(Player->GetActorLocation(), CurrentCameraLocation);
+	float DotRes = FMath::Abs(FVector::DotProduct(CameraToBallVector.GetSafeNormal(), CamForwardVector2d));
+	float AngleInRadians = FMath::Acos(DotRes);
+	float AngleInDegrees = FMath::RadiansToDegrees(AngleInRadians);
+	float TargetDist = CameraToBallDist * FMath::Cos(AngleInRadians);
+	
+#pragma region CanTraceChange
+	if(!IsBallImpacted)
+	{
+		CanTraceCamera = true;
+	}
+	else
+	{
+		// CamForwardVector2d.Z = 0;
+		// CameraToBallVector.Z = 0;
+		float CurrentHalfOfFieldOfView = 40.0f;			//¾ÈÀüÇÏ°Ô ½Ã¾ß°¢ 80µµ ±âÁØÀ¸·Î ÇÑ´Ù.
+		
+		// SG_LOG(Log, "SJW [000] DotRes %f", DotRes);
+		// SG_LOG(Log, "SJW [000] SkyTraceStopDist %f", SkyTraceStopDist);
+		// SG_LOG(Log, "SJW [000] SkyTraceLowApexStopDist %f", SkyTraceLowApexStopDist);
+		// SG_LOG(Log, "SJW [000] TargetDist %f", TargetDist);
+		// SG_LOG(Log, "SJW [000] AngleInDegrees %f", AngleInDegrees);
+
+		float WaitImpactedAfterTime = IsPredictGreenLanding ? 1.0f : 0.5f;
+		if(ImpactedTime >= WaitImpactedAfterTime)
+		{
+			if(IsLowApex) {	CanTraceCamera = !IsTraceCameraPrevAlreadyStopped && Player->GetBallMoving() && (TargetDist > SkyTraceLowApexStopDist) && (AngleInDegrees < CurrentHalfOfFieldOfView) && (DotRes > 0.4f); }
+			else { CanTraceCamera = !IsTraceCameraPrevAlreadyStopped && Player->GetBallMoving() && (TargetDist > SkyTraceStopDist) && (AngleInDegrees < CurrentHalfOfFieldOfView) && (DotRes > 0.4f); }	
+		}
+	}
+
+	if(IsBallImpacted && !CanTraceCamera)
+	{
+		IsTraceCameraPrevAlreadyStopped = true;
+	}
+#pragma endregion
+	
+#pragma region DrawLandingLine
+	if(CanAddLandingPathLine)
+	{
+		if(IsLanding)
+		{
+			if(!IsAlreadyPauseTrace)
+			{
+				CameraRailActor->PauseTrace();
+				IsAlreadyPauseTrace = true;
+			}
+
+			if(!IsOBZPos(predictLandingPositionForSkyTrace))
+			{
+				if(IsUnder100Shot)
+				{
+					SkyTraceDrawLandingLineWithFollowCamera(Controller, Player, 200, FVector(0, 0, 100));
+				}
+				else
+				{
+					if(IsLowApex)
+					{
+						SkyTraceDrawLandingLineWithFollowCamera(Controller, Player, 300, FVector(0, 0, 100));
+					}
+					else
+					{
+						if(LandingTime <= LandingWaitTime)
+						{
+							SkyTraceCameraDownVectorAfterLandingPassTime += DeltaTime;
+							float TargetAlpha = SkyTraceCameraDownVectorAfterLandingPassTime / LandingWaitTime;
+							if(TargetAlpha > LandingWaitTime) TargetAlpha = LandingWaitTime;
+							
+							float Result = FMath::Lerp(0, -100, TargetAlpha);
+							SkyTraceDrawLandingLineWithFollowCamera(Controller, Player, 100, FVector(0, 0, Result));
+						}
+						else
+						{
+							if(!IsAlreadyAddBezierLandingLine)
+							{
+								SkyTraceDrawLandingLineWithBezierCurve(Controller, Player, DeltaTime);
+							}
+					
+							if(IsBallImpacted)
+							{
+								SkyTraceDrawLandingLineWithFollowCamera(Controller, Player, 300, FVector(0, 0, 100));
+							}
+						}
+					}
+				}
+			}
+			else
+			{
+				SkyTraceDrawLandingLineWithFollowCamera(Controller, Player, 300, FVector(0, 0, 100));
+			}
+		}
+	}
+#pragma endregion
+	
+#pragma region SetCameraFollowSpeed
+	if(IsLowApex)
+	{
+		if(SkyTraceAscendVelocityRatio > 1.0f) SkyTraceAscendVelocityRatio = 1.0f;
+		if(SkyTraceDescendVelocityRatio > 1.0f) SkyTraceDescendVelocityRatio = 1.0f;
+	}
+#pragma endregion
+	
+#pragma region CalcDistAlongSpline
+	if(CanTraceCamera && !IsTraceCameraPrevAlreadyStopped)
+	{
+		if(!IsBallImpacted)
+		{
+			//»ó½ÂÁßÀÎ °æ¿ì
+			if(!IsLanding)
+			{
+				DistanceAlongSpline += Player->GetVelocity().Size() * DeltaTime * SkyTraceAscendVelocityRatio;
+				
+				// SG_LOG(Log, "SkyTraceCameraWork [000] Velocity Case IsRising %f", Player->GetVelocity().Size());	
+			}
+			//ÇÏ°­ÁßÀÎ °æ¿ì
+			else
+			{
+				DistanceAlongSpline += Player->GetVelocity().Size() * DeltaTime * SkyTraceDescendVelocityRatio;
+				
+				// SG_LOG(Log, "SkyTraceCameraWork [000] Velocity Case IsLanding %f", Player->GetVelocity().Size());
+			}
+			// SG_LOG(Log, "SkyTraceCameraWork [000] Velocity 111 %f", Player->GetVelocity().Size());
+		}
+		else
+		{
+			float Velocity = Player->GetVelocity().Size();
+			// if(Velocity < 400) Velocity = 400;
+			DistanceAlongSpline += Velocity * DeltaTime * SkyTraceAscendVelocityRatio;
+		}
+	}
+#pragma endregion
+	
+	FVector NewLocation = CameraRailActor->GetLocationAtDistanceAlongSpline(DistanceAlongSpline, ESplineCoordinateSpace::World);
+	
+	if(CanTraceCamera)
+	{
+		//ÀÌÀü¿¡ ÇÑ¹ø °Å¸® Á¦ÇÑÀ¸·Î ¸ØÃá °æ¿ì
+		if(IsTraceCameraPrevAlreadyStopped)
+		{
+			// FVector PrevCameraLocation = SkyTraceCamera->GetCamera()->GetComponentLocation();
+			// FVector TargetLerpLocation = FMath::Lerp(PrevCameraLocation, NewLocation, 0.01f);
+			//
+			// SkyTraceCamera->GetCamera()->SetWorldLocation(TargetLerpLocation);
+		}
+		else
+		{
+			FVector PrevCameraLocation = SkyTraceCamera->GetCamera()->GetComponentLocation();
+			FVector TargetLerpLocation = FMath::Lerp(PrevCameraLocation, NewLocation, 0.5f);
+			SkyTraceCamera->GetCamera()->SetWorldLocation(TargetLerpLocation);
+		}
+	}
+
+	FVector BallLocation = Player->GetActorLocation();
+	FVector NewLocationToBallLocation = BallLocation -  SkyTraceCamera->GetCamera()->GetComponentLocation();
+	
+	float OffSetRotateAngle = 0.0f;
+	if(!IsTeeShot) { OffSetRotateAngle = ShiftSecondShotOffSetAngle; }
+	
+	FRotator CurrentRotation = SkyTraceCamera->GetCamera()->GetComponentRotation();
+	FVector ShiftedCamToBallDirVector = NewLocationToBallLocation.RotateAngleAxis(ShiftRotateAngle + OffSetRotateAngle, FVector::ZAxisVector);
+	FRotator TargetRotation = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
+	FRotator ResultRot = FMath::Lerp(CurrentRotation, TargetRotation, 0.02f);
+
+	if(IsUnder100Shot)
+	{
+		if(!IsBallImpacted && BottomUnsafe)
+		{
+			FVector2D TargetScreenPosition = FVector2D(ViewportSize.X * 0.5f, ViewportSize.Y * 0.8f);
+			FVector2D Delta = TargetScreenPosition - BallScreenPosition;
+		
+			float RotationSpeed = 1.0f; // Ä«¸Ş¶ó È¸Àü ¼Óµµ Á¶Àı
+		
+			if (Delta.Size() > KINDA_SMALL_NUMBER)
+			{
+				FRotator NewRotation = SkyTraceCamera->GetCamera()->GetComponentRotation();
+				NewRotation.Pitch += Delta.Y * RotationSpeed * DeltaTime;
+		
+				SkyTraceCamera->GetCamera()->SetWorldRotation(NewRotation);
+			}
+		}
+	}
+	else
+	{
+		if(!IsBallImpacted && (UpperUnSafe || BottomUnsafe))
+		{
+			FVector2D TargetScreenPosition = UpperUnSafe ?
+				FVector2D(ViewportSize.X * 0.5f, ViewportSize.Y * 0.2f) :
+				FVector2D(ViewportSize.X * 0.5f, ViewportSize.Y * 0.8f);
+		
+			FVector2D Delta = TargetScreenPosition - BallScreenPosition;
+		
+			float RotationSpeed = 1.0f; // Ä«¸Ş¶ó È¸Àü ¼Óµµ Á¶Àı
+
+			if (Delta.Size() > KINDA_SMALL_NUMBER)
+			{
+				FRotator NewRotation = SkyTraceCamera->GetCamera()->GetComponentRotation();
+				NewRotation.Pitch += Delta.Y * RotationSpeed * DeltaTime;
+
+				SkyTraceCamera->GetCamera()->SetWorldRotation(NewRotation);
+			}
+		}
+	}
+
+	if(IsBallImpacted || IsBadImpacted)
+	{
+		float TargetStopDist = IsLowApex ? SkyTraceLowApexStopDist : SkyTraceStopDist;
+		bool IsTooClose = TargetDist < 200;
+		FVector CameraForwardDir = SkyTraceCamera->GetCamera()->GetForwardVector();
+		CameraForwardDir.Z = 0;
+		FVector BallForwardDir = Player->GetVelocity();
+		BallForwardDir.Z = 0;
+		float DotCamBallRes = FVector::DotProduct(CameraForwardDir, BallForwardDir);
+		// SG_LOG(Log, "DotCamBallRes : %f", DotCamBallRes);
+
+		if(!IsChangedSafeAreaRatioAfterImpacted)
+		{
+			TargetHorizontalSafeAreaRatio = IsOBZPos(predictLandingPositionForSkyTrace) ? 0.6f : 0.9f;
+			IsChangedSafeAreaRatioAfterImpacted = true;
+		}
+		
+		if(IsTooClose && (DotCamBallRes < 0))
+		{
+			FVector PrevCameraLocation = SkyTraceCamera->GetCamera()->GetComponentLocation();
+			FVector TargetLocation = BallLocation - BallForwardVectorAfterImpact * 200;
+			TargetLocation.Z = PrevCameraLocation.Z;
+			GroundCheck(TargetLocation, TargetLocation);
+			
+			FVector LerpedTargetLocation = FMath::Lerp(PrevCameraLocation, TargetLocation, 0.5f);
+			SkyTraceCamera->GetCamera()->SetWorldLocation(LerpedTargetLocation);
+		}
+		else
+		{
+			if(BottomUnsafe)
+			{
+				FVector2D TargetScreenPosition = FVector2D(BallScreenPosition.X, ViewportSize.Y * 0.8f);
+				FVector2D Delta = TargetScreenPosition - BallScreenPosition;
+		
+				float RotationSpeed = 1.0f; // Ä«¸Ş¶ó È¸Àü ¼Óµµ Á¶Àı
+		
+				if (Delta.Size() > KINDA_SMALL_NUMBER)
+				{
+					FRotator NewRotation = SkyTraceCamera->GetCamera()->GetComponentRotation();
+					NewRotation.Pitch += Delta.Y * RotationSpeed * DeltaTime;
+		
+					SkyTraceCamera->GetCamera()->SetWorldRotation(NewRotation);
+				}
+			}
+		}
+	}
+
+	bool LeftUnSafe = false;
+	bool RightUnSafe = false;
+	CheckSkyTraceHorizontalUnSafeScreenArea(BallScreenPosition.X, LeftUnSafe, RightUnSafe);
+	
+	if(LeftUnSafe || RightUnSafe)
+	{
+		FRotator CameraRotation = SkyTraceCamera->GetCamera()->GetComponentRotation();
+		float RotationSpeed = 1; // Ä«¸Ş¶ó È¸Àü ¼Óµµ Á¶Àı
+		
+		if (LeftUnSafe) {
+			FVector2D TargetScreenPosition = FVector2D(ViewportSize.X * (1 - TargetHorizontalSafeAreaRatio), BallScreenPosition.Y);
+			FVector2D Delta = TargetScreenPosition - BallScreenPosition;
+
+			// SG_LOG(Log, "Test 001 Delta 1111 %s", *Delta.ToString());
+
+			if (Delta.Size() > KINDA_SMALL_NUMBER)
+			{
+				CameraRotation.Yaw -= Delta.X * RotationSpeed * DeltaTime;
+			}
+		}
+		else
+		{
+			FVector2D TargetScreenPosition = FVector2D(ViewportSize.X * TargetHorizontalSafeAreaRatio, BallScreenPosition.Y);
+			FVector2D Delta = TargetScreenPosition - BallScreenPosition;
+
+			// SG_LOG(Log, "Test 001 Delta 2222 %s", *Delta.ToString());
+
+			if (Delta.Size() > KINDA_SMALL_NUMBER)
+			{
+				CameraRotation.Yaw -= Delta.X * RotationSpeed * DeltaTime;
+			}
+		}
+		
+		SkyTraceCamera->GetCamera()->SetWorldRotation(CameraRotation);
+	}
+}
+
+void ASGCamera::GetGroundFromPosition(FVector StartLoc, FVector Dir, FVector& ResultLoc)
+{
+	FHitResult HitResult;
+	FVector Start = StartLoc;
+	FVector End = StartLoc + Dir * 100000;
+	
+	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
+	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel1));
+	TArray<AActor*> IgnoreActors;
+	
+	// SG_LOG(Log, "GetGroundFromPosition.........StartLoc %s", *StartLoc.ToString());
+	
+	bool bIsGround = UKismetSystemLibrary::LineTraceSingleForObjects(GetWorld(), Start, End, ObjectTypes, false, IgnoreActors,  EDrawDebugTrace::None, HitResult, true);
+	if(bIsGround)
+	{
+		ResultLoc = HitResult.ImpactPoint;
+	}
+}
+
+void ASGCamera::SkyTraceDrawLandingLineWithBezierCurve(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime)
+{
+	// SG_LOG(Log, "SkyTraceDrawLandingLineWithBezierCurve called....predictLandingPositionForSkyTrace %s", *predictLandingPositionForSkyTrace.ToString());
+	IsAlreadyAddBezierLandingLine = true;
+
+	FVector TargetOffSetHeight = IsPredictGreenLanding ? FVector(0, 0, GreenTrailLimitHeight) : FVector(0, 0, 500);
+	FVector EndTracePoint = predictLandingPositionForSkyTrace + TargetOffSetHeight;
+	// SG_LOG(Log, "SkyTraceDrawLandingLineWithBezierCurve called....EndTracePoint %s", *EndTracePoint.ToString());
+	CameraRailActor->AddBezier4PointTraceToEndPoint(EndTracePoint);
+}
+
+void ASGCamera::SkyTraceDrawLandingLineWithFollowCamera(APlayerController* Controller, ASGPlayerCharacter* Player, float BackwardAmount, FVector UpVector)
+{
+	// SG_LOG(Log, "SkyTraceDrawLandingLineWithFollowCamera called....");
+	FVector BallLocation = Player->GetActorLocation();
+	
+	if(!IsBallImpacted)
+	{
+		FVector LastTracePoint = CameraRailActor->GetLastPoint();
+		FVector BackwardVector = (BallLocation - LastTracePoint).GetSafeNormal();
+		BackwardVector.Z = 0;
+		
+		FVector TargetLocation = BallLocation - BackwardVector * BackwardAmount;
+
+		if(IsValid(CameraRailActor))
+		{
+			USGUserData* const playerData = DATA_CENTER->FindUserData(Player->GetUniqID());
+			bool IsRightShift = playerData->HandIndex == 1;
+
+			float TargetRotateAngle = IsRightShift ? -90.0f : 90.0f; 
+			TargetLocation += BackwardVector.RotateAngleAxis(TargetRotateAngle, FVector::ZAxisVector).GetSafeNormal() * CameraRailActor->GetLeftVectorAmount();
+		}
+		
+		// SG_LOG(Log, "TargetLocation %s", *TargetLocation.ToString());
+
+		CameraRailActor->AddTracePoint(TargetLocation, true);
+	}
+	else
+	{
+		//°øÀÌ ´êÀº ÀÌÈÄºÎÅÍ´Â ÇöÀç Ä«¸Ş¶ó À§Ä¡ (»ìÂ¦ ¾ÕÂÊ) ºÎÅÍ °øÀÇ ¹æÇâÀ¸·Î RailÀ» »õ·Î ±×¸°´Ù.
+		if(!IsRemoveCamPointToEndPoint)
+		{
+			FVector CameraLocation = SkyTraceCamera->GetCamera()->GetComponentLocation();
+			FVector DirCamToBall = (BallLocation - CameraLocation).GetSafeNormal();
+			CameraRailActor->ReFormCamPointToEndPoint(CameraLocation, DirCamToBall);
+			IsRemoveCamPointToEndPoint = true;
+		}
+		
+		FVector TargetLocation = BallLocation;
+		
+		CameraRailActor->AddTracePointAfterImpacted(TargetLocation, true);
+	}
+}
+
+void ASGCamera::SkyTraceDrawLandingLineApexLocation(ASGPlayerCharacter* Player) { }
+
+void ASGCamera::SetFoliageOpacity()
+{
+	if(!IsFoliageTimerInitialized) return;
+	if (nullptr == GameInst) return;
+	if (nullptr == PlayerController) return;
+	if (nullptr == PlayerChar) return;
+	
+	FVector CameraLocation = PlayerController->PlayerCameraManager->GetCameraLocation();
+	
+	TArray<UActorComponent*> InstancedStaticMeshCompArray;
+	FVector BallLocation = PlayerChar->GetActorLocation();
+	
+	for (TActorIterator<AInstancedFoliageActor> Iter(GetWorld()); Iter; ++Iter)
+	{
+		AInstancedFoliageActor* FoliageMesh = *Iter;
+		if (nullptr == FoliageMesh) continue;
+
+		auto FoliageComponents = FoliageMesh->K2_GetComponentsByClass(UFoliageInstancedStaticMeshComponent::StaticClass());
+
+		for (auto& Comp : FoliageComponents)
+		{
+			auto FoliageComponent = Cast<UFoliageInstancedStaticMeshComponent>(Comp);
+			
+			if (FoliageComponent != nullptr)
+			{
+				UStaticMesh* Mesh = FoliageComponent->GetStaticMesh();
+
+				auto InstanceCount = FoliageComponent->GetInstanceCount();
+				
+				for (int i = 0; i < InstanceCount; ++i)
+				{
+					// FTransform InstanceTransform;
+					//
+					// FoliageComponent->GetInstanceTransform(i, InstanceTransform, true);
+					//
+					// // UE_LOG( LogTemp, Display, TEXT("%s[%d] %s"), *Mesh->GetName(), i, *InstanceTransform.ToString() );
+					//
+					// //Ä«¸Ş¶ó ¹İ°æ 10m ¹Û¿¡ ÀÖ´Â FoliageActor´Â ÇÊÅÍ¸µ
+					// float DistToCam = FVector::Distance(CameraLocation, InstanceTransform.GetLocation());
+					// if(DistToCam > 1000) {	continue; }
+					//
+					// // SG_LOG(Log, "DistToCam %f FoliageLocation %s", DistToCam, *InstanceTransform.GetLocation().ToString());
+					//
+					// //Ä«¸Ş¶ó°¡ ¹Ù¶óº¸°í ÀÖ°í, °ø~Ä«¸Ş¶ó »çÀÌ¿¡ Á¸ÀçÇÏ´Â °æ¿ì ¹İÅõ¸í Ã³¸®
+					// FVector CamToFoliageDir = (InstanceTransform.GetLocation() - CameraLocation).GetSafeNormal();
+					// FVector CamToBallDir = (BallLocation - CameraLocation).GetSafeNormal();
+					// float DotRes = FVector::DotProduct(CamToFoliageDir, CamToBallDir);
+					// if(DotRes < 0)
+					// {
+					// 	SG_LOG(Log, "InstanceTransform DotRes Issue...");
+					// 	continue;
+					// }
+					//
+					// float DistCamToFoliage = FVector::Distance(InstanceTransform.GetLocation(), CameraLocation);
+					// float DistCamToBall = FVector::Distance(BallLocation, CameraLocation);
+					// if(DistCamToFoliage > DistCamToBall)
+					// {
+					// 	SG_LOG(Log, "DistCamToFoliage is Bigger than DistCamToBall...");
+					// 	continue;
+					// }
+
+					FString MeshName = Mesh->GetName();
+
+					// SG_LOG(Log, "Mesh Name : %s, Location : %s", *MeshName, *InstanceTransform.GetLocation().ToString());
+
+					UMaterialInterface* Material = FoliageComponent->GetMaterial(0);
+					if (Material)
+					{
+						// MaterialÀ» º¯°æÇÏ°Å³ª ¼öÁ¤ÇÏ´Â ÄÚµå ÀÛ¼º
+						UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(Material, this);
+						DynamicMaterial->SetScalarParameterValue(FName("Opacity"), 0.0f);
+						FoliageComponent->SetMaterial(0, DynamicMaterial);
+					}
+				}
+			}
+		}
 	}
 }

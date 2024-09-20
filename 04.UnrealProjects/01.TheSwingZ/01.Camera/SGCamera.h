@@ -2,11 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "SGCommon.h"
+#include "SGGameInstance.h"
 #include "GameFramework/Actor.h"
 #include "SGIPFinder.h"
 #include "SGShotCameraTable.h"
 #include "SGCamera.generated.h"
 
+class ASGCameraRailActor;
 class ASGPlayerCharacter;
 
 UCLASS()
@@ -23,24 +25,35 @@ protected:
 	void Tick(float DeltaTime) override;
 
 public:
-	void ImpactCameraSetting(ERenderType::Type RenderType, bool IsTeeShot);	// Shot ì´ë²¤íŠ¸
+	void ImpactCameraSetting(ERenderType::Type RenderType, bool IsTeeShot);	// Shot ÀÌº¥Æ®
 	
 	void SetCurFollowCam();
 	void SetStartPlayerRot(FRotator rot) { StartPlayerRot = rot; }
-	void EndShot(); // ì´í™íŠ¸ê°€ êº¼ì§€ë©´ í”Œë ˆì´ì–´ ì¹´ë©”ë¼ë¡œ ì „í™˜
+	void EndShot(); // ÀÌÆåÆ®°¡ ²¨Áö¸é ÇÃ·¹ÀÌ¾î Ä«¸Ş¶ó·Î ÀüÈ¯
 
 	bool CanTraceCamera = true;
 	bool CanRotateTraceCamera = true;
 	bool CanGreenCameraLookHoleCup = true;
-	bool EndShotWaitCameraNeed = false;		//ìƒ· ì´í›„ ë‹¤ìŒ í”Œë ˆì´ì–´ ì¤€ë¹„ ì „ê¹Œì§€ ëŒ€ê¸°í•˜ëŠ” ì¹´ë©”ë¼ê°€ í•„ìš”í•œê°€?
+	bool EndShotWaitCameraNeed = false;		//¼¦ ÀÌÈÄ ´ÙÀ½ ÇÃ·¹ÀÌ¾î ÁØºñ Àü±îÁö ´ë±âÇÏ´Â Ä«¸Ş¶ó°¡ ÇÊ¿äÇÑ°¡?
 	void ActiveEndShotWaitCamera();
 	
 	bool HoleIn = true;
 
 	void ChangeCameraShiftSettings(float TargetShiftRotateAngle = 0);
 
+	TArray<UReadyCameraRecord*> GetAllReadyCameraRecords();
+	UReadyCameraRecord* GetLastReadyCameraRecord();
+	UReadyCameraRecord* GetTargetReadyCameraRecord(ASGPlayerCharacter* Player, bool mIsTeeShot);
+
+	const float MAX_TRACE_CAMERA_DISTANCE = 1000;
+	
+	bool GetIsLanding() { return IsLanding; };
+	bool GetIsBallImpacted() { return IsBallImpacted; }
+	float GetGroundCheckUpperAmount() { return GroundCheckUpperAmount; }
+	FVector GetApexPosition() { return apexPosition; }
+	float GetFlyingTime() { return flyingTime; }
 private:
-	void SpawnCamera();	// ì¹´ë©”ë¼ ì´ˆê¸°í™”
+	void SpawnCamera();	// Ä«¸Ş¶ó ÃÊ±âÈ­
 
 	UFirstCameraRecord* GetFirstCameraRecordByIndex(int32 ID);
 	TArray<UFirstCameraRecord*> GetFirstCameraRecordsByPriority(int32 ID);
@@ -67,22 +80,33 @@ private:
 	void NewImpactCameraSettings(ERenderType::Type RenderType);
 
 	void InitBadPlaceHitCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
+	void InitFixedCameraWithNoRotateWork(APlayerController* Controller, ASGPlayerCharacter* Player);
 	void InitFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
 	void InitTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
 	void InitReverseFixedCameraWork(APlayerController* Controller, FVector BallLocation);
 	void InitSideCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
 	void InitSideBellowCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
 	void InitReverseTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
-
+	void InitSkyTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
+	
+	void FixedCameraWithNoRotateWork(ASGPlayerCharacter* Player);
 	void FixedCameraWork(ASGPlayerCharacter* Player);
 	
 	void TraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
 	void DrivingModeTraceCameraSubWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
 	void CourseModeTraceCameraSubWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
+	void SkyTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
 
-	void PuttingZoomCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
+	void SkyTraceDrawLandingLineWithBezierCurve(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
+	void SkyTraceDrawLandingLineWithFollowCamera(APlayerController* Controller, ASGPlayerCharacter* Player, float BackwardAmount, FVector UpVector);
+	void SkyTraceDrawAfterImpactLine(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
+	void SkyTraceDrawLandingLineApexLocation(ASGPlayerCharacter* Player);
+	
+	void PuttingZoomCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
 	void InitPuttingTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
 	void PuttingTraceCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
+	void InitPuttingFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
+	void PuttingFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player, float DeltaTime);
 	
 	void ReverseFixedCameraWork(APlayerController* Controller, ASGPlayerCharacter* Player);
 	void SideCameraWork(ASGPlayerCharacter* Player);
@@ -100,69 +124,95 @@ private:
 
 	bool IsCloseToGround(ASGPlayerCharacter* Player, float TargetHeight);
 
-	void GroundCheck(FVector CameraLoc, FVector& ResultLoc);			//í˜„ì¬ ìœ„ì¹˜ ê¸°ì¤€ ì¢Œìš° OB ì§€ì  ì°¾ê¸°
+	void GroundCheck(FVector CameraLoc, FVector& ResultLoc);			//ÇöÀç À§Ä¡ ±âÁØ ÁÂ¿ì OB ÁöÁ¡ Ã£±â
+	FVector GetVerticalGroundPos(FVector From);
 	
-	void GetLeftRightFairWayPos(FVector MoveDir, FVector CurrentLocation, FVector &LeftLoc, FVector &RightLoc);		//ì‚¬ì´ë“œ ì¹´ë©”ë¼ ìœ„ì¹˜ ê¸°ì¤€ ì¢Œìš° Fairway ì§€ì  ì°¾ê¸°
+	void GetLeftRightFairWayPos(FVector MoveDir, FVector CurrentLocation, FVector &LeftLoc, FVector &RightLoc);		//»çÀÌµå Ä«¸Ş¶ó À§Ä¡ ±âÁØ ÁÂ¿ì Fairway ÁöÁ¡ Ã£±â
 	bool IsFineConditionToSideCamera(float SideSpinRate, float SideAngleInDegree);
 	
 	void GetFairWayPosFromOBToApex(FVector From, FVector To, FVector &ResultLoc);
 
 	bool IsOBZPos(FVector CurrentLocation);
+	bool IsOnGreen(FVector Pos);
 
-	void TraceCamZPosFix(FVector& CameraLoc);											//ì •ë°©í–¥ ì¶”ì  ì¹´ë©”ë¼ ì§€ë©´ ì•„ë˜ ê²€ì‚¬
-	void TraceCamZPosFix(FVector& SpringArmLoc, FVector& CameraLoc);					//ì •ë°©í–¥ ì¶”ì  ì¹´ë©”ë¼ ì§€ë©´ ì•„ë˜ ê²€ì‚¬ [í…ŒìŠ¤íŠ¸ ë²„ì „]
-	void StartFixedCamZPosFix(FVector& CameraLoc);										//ì§€ë©´ ê³ ì • ì¹´ë©”ë¼ ì§€ë©´ ì•„ë˜ ê²€ì‚¬
-	void PuttingTraceCamZPosFix(FVector& CameraLoc);									//í¼íŒ… ì¶”ì  ì¹´ë©”ë¼ ì§€ë©´ ì•„ë˜ ê²€ì‚¬
+	void TraceCamZPosFix(FVector& CameraLoc);											//Á¤¹æÇâ ÃßÀû Ä«¸Ş¶ó Áö¸é ¾Æ·¡ °Ë»ç
+	void TraceCamZPosFix(FVector& SpringArmLoc, FVector& CameraLoc);					//Á¤¹æÇâ ÃßÀû Ä«¸Ş¶ó Áö¸é ¾Æ·¡ °Ë»ç [Å×½ºÆ® ¹öÀü]
+	void StartFixedCamZPosFix(FVector& CameraLoc);										//Áö¸é °íÁ¤ Ä«¸Ş¶ó Áö¸é ¾Æ·¡ °Ë»ç
+	void PuttingTraceCamZPosFix(FVector& CameraLoc);									//ÆÛÆÃ ÃßÀû Ä«¸Ş¶ó Áö¸é ¾Æ·¡ °Ë»ç
 	
 	bool IsSafeSurface(EPhysicalSurface Surface);
 	
 	void PredictLandingPosition(FVector BallLocation, FVector BallVelocity, FVector AngularVelocity, FVector BowlerFreeViewLastPosition, FVector TargetWindForceVector, int MagnusForceCount);
-
+	void PredictApexPosition(FVector BallLocation, FVector BallVelocity, FVector MagnusVector);
+	void GetGroundFromPosition(FVector StartLoc, FVector Dir, FVector& ResultLoc);
+	
 	bool IsPredictWrongLandingZone();
 	bool GetIsUnder100(ASGPlayerCharacter* Player, FVector HoleCupLoc);
 
 	bool IsAvailableThirdCamera(APlayerController* Controller, ASGPlayerCharacter* Player);
 	bool CheckUnSafeScreenArea(int32 CurrentScreenY, bool& UpperUnSafe, bool& BottomUnsafe);
+	bool CheckSkyTraceVerticalUnSafeScreenArea(int32 CurrentScreenY, bool& UpperUnSafe, bool& BottomUnsafe);
+	bool CheckSkyTraceHorizontalUnSafeScreenArea(int32 CurrentScreenX, bool& LeftUnSafe, bool& RightUnsafe);
+	bool CheckSkyTraceOutOfScreen(APlayerController* Controller, FVector2d CurrentScreenPosition);
+	
+	float EaseIn(float t);
 
+	void SetFoliageOpacity();
+	
 private:
-	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 BeforeApexCamNum = 0; // 1 : ì‹œì‘ ê³ ì • ì¹´ë©”ë¼, 2 : ì¶”ì  ì¹´ë©”ë¼ (ì •ë°©í–¥)
-	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 AfterApexCamNum = 0; // 1 : ì§€ë©´ ê³ ì • ì¹´ë©”ë¼, 2 : ì‚¬ì´ë“œ ì¹´ë©”ë¼, 3 : ì¶”ì  ì¹´ë©”ë¼ (ì •ë°©í–¥)
-	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 PuttingCamNum = 1; // 1 : í¼íŒ… ì¶”ì  ì¹´ë©”ë¼ (ì •ë°©í–¥), 2 : í¼íŒ… ê³ ì • ì¹´ë©”ë¼ (ì—­ë°©í–¥)
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 DebugAfterApexCamNum = -1; // -1 : ê°•ì œ ApexCam ì‚¬ìš©í•˜ì§€ ì•ŠìŒ. ê·¸ ì™¸ì— ê°’ìœ¼ë¡œ ê°•ì œ ì„¸íŒ…
-
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float TraceCameraTargetArmLength = 300; // ì¶”ì  ì¹´ë©”ë¼ ì§€ì • Arm Length
+	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 BeforeApexCamNum = 0; // 1 : ½ÃÀÛ °íÁ¤ Ä«¸Ş¶ó, 2 : ÃßÀû Ä«¸Ş¶ó (Á¤¹æÇâ), 3 : ½Å±Ô ÃßÀû Ä«¸Ş¶ó (Á¤¹æÇâ) SkyTrace
+	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 AfterApexCamNum = 0; // 1 : Áö¸é °íÁ¤ Ä«¸Ş¶ó, 2 : »çÀÌµå Ä«¸Ş¶ó, 3 : ÃßÀû Ä«¸Ş¶ó (Á¤¹æÇâ), 5 : BadPlace ºÎµúÈû Ä«¸Ş¶ó, 6 : ½Å±Ô ÃßÀû Ä«¸Ş¶ó (Á¤¹æÇâ) SkyTrace, 7 : ½ÃÀÛ °íÁ¤ Ä«¸Ş¶ó
 	
-	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float BackTraceHeightRate = 0.66f; // ì¶”ì  ì¹´ë©”ë¼ ë†’ì´ ë¹„ìœ¨
+	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 PuttingCamNum = 1; // 1 : ÆÛÆÃ ÃßÀû Ä«¸Ş¶ó (Á¤¹æÇâ), 2 : ÆÛÆÃ °íÁ¤ Ä«¸Ş¶ó (¿ª¹æÇâ)
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) int32 DebugAfterApexCamNum = -1; // -1 : °­Á¦ ApexCam »ç¿ëÇÏÁö ¾ÊÀ½. ±× ¿Ü¿¡ °ªÀ¸·Î °­Á¦ ¼¼ÆÃ
 
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideCameraLocationZRatio = 1.0; // ì‚¬ì´ë“œ ì¹´ë©”ë¼ Z ìœ„ì¹˜ê°€ APEXì˜ ëª‡% ì§€ì ì— ìœ„ì¹˜í•  ê²ƒì¸ì§€. [1ì— ê°€ê¹Œìš¸ìˆ˜ë¡ ì˜ˆìƒ ë‚™êµ¬ ì§€ì ]
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideCameraLocationXYRatio = 0.5; // ì‚¬ì´ë“œ ì¹´ë©”ë¼ X ìœ„ì¹˜ê°€ APEXì˜ ëª‡% ì§€ì ì— ìœ„ì¹˜í•  ê²ƒì¸ì§€. [1ì— ê°€ê¹Œìš¸ìˆ˜ë¡ ì˜ˆìƒ ë‚™êµ¬ ì§€ì ]
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideCameraDist = 1000; // ì‚¬ì´ë“œ ì¹´ë©”ë¼ê°€ ì–¼ë§ˆë‚˜ ê³µê³¼ ì˜†ìœ¼ë¡œ ë–¨ì–´ì ¸ ìˆì„ì§€
-
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideBellowCameraLocationXYRatio = 0.5; // 45ë„ ì¸¡ë©´ ì‚¬ì´ë“œ ì¹´ë©”ë¼ X ìœ„ì¹˜ê°€ APEXì˜ ëª‡% ì§€ì ì— ìœ„ì¹˜í•  ê²ƒì¸ì§€. [1ì— ê°€ê¹Œìš¸ìˆ˜ë¡ ì˜ˆìƒ ë‚™êµ¬ ì§€ì ]
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float TraceCameraTargetArmLength = 300; // ÃßÀû Ä«¸Ş¶ó ÁöÁ¤ Arm Length
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SkyTraceStopDist = 700; //Sky ÃßÀû Ä«¸Ş¶ó Á¤Áö °Å¸®
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SkyTraceLowApexStopDist = 700; //Sky LowApexÀÎ °æ¿ì ÃßÀû Ä«¸Ş¶ó Á¤Áö °Å¸®
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SkyTraceAscendVelocityRatio = 1.0f; //»ó½Â ¼Óµµ
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SkyTraceDescendVelocityRatio = 1.0f; //ÇÏ°­ ¼Óµµ
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SkyTraceBezierCurveLength = 200.0f;  //ÇÏ°­ °æ·Î º£Áö¾î Ä¿ºê Æø
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SkyTraceLeftVectorSpeed = 1.0f;	  //Sky ÃßÀû Ä«¸Ş¶ó »ó½Â½Ã ÁÂÃøÀ¸·Î °æ·Î¸¦ ¾ó¸¶³ª ÀÌµ¿½ÃÅ³Áö
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float WindVectorLandingPosOffset = 500;		//¿¹»ó ³«±¸ ÁöÁ¡ ¸Â¹Ù¶÷ÀÎ °æ¿ì º¸°£ °ª [¾ó¸¶³ª ¿¹»ó ÁöÁ¡À» ¾ÕÀ¸·Î ´ç±æ °ÍÀÎ°¡?]
 	
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float ReverseFixedCameraHeight = 300; // ì§€ë©´ (ì—­ë°©í–¥) ê³ ì • ì¹´ë©”ë¼ ì§€ë©´ìœ¼ë¡œë¶€í„° ë†’ì´
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float ReverseFixedCameraSideDist = 1000; // ì§€ë©´ (ì—­ë°©í–¥) ê³ ì • ì¹´ë©”ë¼ì™€ ë‚™êµ¬ ì˜ˆì¸¡ ì§€ì  ì‚¬ì´ì˜ ê±°ë¦¬
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float GroundCheckUpperAmount = 100; //Áö¸é ¾Æ·¡ º¸Á¤ ¼öÄ¡ °ª [¾ó¸¶³ª À§·Î ¿Ã¸° °ªÀ» ÁÙ °ÍÀÎ°¡?]
+	UPROPERTY(BlueprintReadOnly, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float BackTraceHeightRate = 0.66f; // ÃßÀû Ä«¸Ş¶ó ³ôÀÌ ºñÀ²
 
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float PuttingCameraZoomInSpeed = 3.5;		//í¼íŒ… ì¤Œì¸ ì†ë„
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float PuttingCameraZoomOutSpeed = 0;		//í¼íŒ… ì¤Œì•„ì›ƒ ì†ë„
-	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float PuttingCameraZoomInMin = 30;		//í¼íŒ… ì¤Œì¸ ìµœëŒ€ê°’
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideCameraLocationZRatio = 1.0; // »çÀÌµå Ä«¸Ş¶ó Z À§Ä¡°¡ APEXÀÇ ¸î% ÁöÁ¡¿¡ À§Ä¡ÇÒ °ÍÀÎÁö. [1¿¡ °¡±î¿ï¼ö·Ï ¿¹»ó ³«±¸ ÁöÁ¡]
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideCameraLocationXYRatio = 0.5; // »çÀÌµå Ä«¸Ş¶ó X À§Ä¡°¡ APEXÀÇ ¸î% ÁöÁ¡¿¡ À§Ä¡ÇÒ °ÍÀÎÁö. [1¿¡ °¡±î¿ï¼ö·Ï ¿¹»ó ³«±¸ ÁöÁ¡]
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideCameraDist = 1000; // »çÀÌµå Ä«¸Ş¶ó°¡ ¾ó¸¶³ª °ø°ú ¿·À¸·Î ¶³¾îÁ® ÀÖÀ»Áö
 
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float SideBellowCameraLocationXYRatio = 0.5; // 45µµ Ãø¸é »çÀÌµå Ä«¸Ş¶ó X À§Ä¡°¡ APEXÀÇ ¸î% ÁöÁ¡¿¡ À§Ä¡ÇÒ °ÍÀÎÁö. [1¿¡ °¡±î¿ï¼ö·Ï ¿¹»ó ³«±¸ ÁöÁ¡]
+	
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float ReverseFixedCameraHeight = 300; // Áö¸é (¿ª¹æÇâ) °íÁ¤ Ä«¸Ş¶ó Áö¸éÀ¸·ÎºÎÅÍ ³ôÀÌ
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float ReverseFixedCameraSideDist = 1000; // Áö¸é (¿ª¹æÇâ) °íÁ¤ Ä«¸Ş¶ó¿Í ³«±¸ ¿¹Ãø ÁöÁ¡ »çÀÌÀÇ °Å¸®
+		//ÆÛÆÃ ÁÜÀÎ ¼Óµµ
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float PuttingCameraZoomOutSpeed = 0;		//ÆÛÆÃ ÁÜ¾Æ¿ô ¼Óµµ
+	UPROPERTY(EditAnywhere, Category = "SG Cam", meta = (AllowPrivateAccess = "true")) float PuttingCameraZoomInMin = 30;		//ÆÛÆÃ ÁÜÀÎ ÃÖ´ë°ª
+
+	UPROPERTY(EditAnywhere, Category = "SG Cam") TSoftObjectPtr<class UMaterialParameterCollection> OcclusionMPC;
+	UPROPERTY(Transient) TSoftObjectPtr<class UMaterialParameterCollectionInstance> OcclusionMPCInstance;
 private:
 	FVector holecupLocation = FVector::ZeroVector;
 	
 	UPROPERTY() class ASGCameraMode* TraceCamera					= nullptr;
 	UPROPERTY() class ASGCameraMode* EndShotWaitCamera				= nullptr;
-	UPROPERTY() class ASGCameraMode* StartFixedCamera				= nullptr;		//ì‹œì‘ ì§€ë©´ ê³ ì • ì¹´ë©”ë¼
+	UPROPERTY() class ASGCameraMode* StartFixedCamera				= nullptr;		//½ÃÀÛ Áö¸é °íÁ¤ Ä«¸Ş¶ó
 	UPROPERTY() class ASGCameraMode* ReverseCamera					= nullptr;
-	UPROPERTY() class ASGCameraMode* ReverseLandFixedCamera			= nullptr;		//ì§€ë©´ ê³ ì • ì—­ë°©í–¥ ì¹´ë©”ë¼
-	UPROPERTY() class ASGCameraMode* GreenCamera					= nullptr;
+	UPROPERTY() class ASGCameraMode* ReverseLandFixedCamera			= nullptr;		//Áö¸é °íÁ¤ ¿ª¹æÇâ Ä«¸Ş¶ó
+	UPROPERTY() class ASGCameraMode* PuttingFixedCamera					= nullptr;
 	UPROPERTY() class ASGCameraMode* SideCamera						= nullptr;
 	UPROPERTY() class ASGCameraMode* BadPlaceHitFixedCamera			= nullptr;
-	UPROPERTY() class ASGCameraMode* PuttingZoomCamera				= nullptr;		//í¼íŒ… ì¤Œì¸ ì¹´ë©”ë¼
-	UPROPERTY() class ASGCameraMode* PuttingTraceCamera				= nullptr;		//í¼íŒ… ì¶”ì  ì¹´ë©”ë¼[ì¼ë°˜]
+	UPROPERTY() class ASGCameraMode* PuttingZoomCamera				= nullptr;		//ÆÛÆÃ ÁÜÀÎ Ä«¸Ş¶ó
+	UPROPERTY() class ASGCameraMode* PuttingTraceCamera				= nullptr;		//ÆÛÆÃ ÃßÀû Ä«¸Ş¶ó[ÀÏ¹İ]
+	UPROPERTY() class ASGCameraMode* SkyTraceCamera					= nullptr;		//ÇÏ´ÃÀÌ ´õ º¸ÀÌ´Â Æ¯¼ö ÃßÀû Ä«¸Ş¶ó
 	
 	UPROPERTY() TObjectPtr<UCameraComponent> CurFollowCam = nullptr;
-
+	
+	UPROPERTY() USGGameInstance* GameInst = nullptr;
+	UPROPERTY() APlayerController* PlayerController = nullptr;
+	UPROPERTY() ASGPlayerCharacter* PlayerChar = nullptr;
+	UPROPERTY() ASGCourseMode* CourseMode = nullptr;
 private:
 	bool CanTickCameraWork		= false;
 	bool IsLanding		= false;
@@ -172,65 +222,135 @@ private:
 	bool IsNotChange	= false;
 	bool IsTeeShot		= true;
 	bool IsHitBadPlace	= false;
-	bool IsHoleIn		= false;	// Holeì— ê³µì´ ë“¤ì–´ê°”ë‹¤ê³  íŒë‹¨
+	bool IsHoleIn		= false;			// Hole¿¡ °øÀÌ µé¾î°¬´Ù°í ÆÇ´Ü
+	bool IsPredictGreenLanding = false;
 
-	bool IsBadImpacted = false;				//ì˜ëª» ë§ì€ ê²½ìš°
+	bool IsBadImpacted = false;				//Àß¸ø ¸ÂÀº °æ¿ì
 	
 	float flyingTime	= 0;
+	const float LandingWaitTime = 1.5f;
+
+	float TargetHorizontalSafeAreaRatio = 0.6f;
+	float DefaultTargetHorizontalSafeAreaRatio = 0.6f;
+	bool IsChangedSafeAreaRatioAfterImpacted = false;
 	
 	float ballPower					= 0;
 	float launchAngle				= 0;
 	float sideSpinRate				= 0;
-	float launchSideAngleInDegree	= 0;	//ì´ˆê¸° ë°”ë¼ë³´ëŠ” ë°©í–¥ì—ì„œ ì¢Œìš°ë¡œ ì–¼ë§ˆë‚˜ íšŒì „í•˜ì—¬ ì³¤ëŠ”ê°€? [ë¼ë””ì•ˆ ê°’]
+	float launchSideAngleInDegree	= 0;	//ÃÊ±â ¹Ù¶óº¸´Â ¹æÇâ¿¡¼­ ÁÂ¿ì·Î ¾ó¸¶³ª È¸ÀüÇÏ¿© ÃÆ´Â°¡? [¶óµğ¾È °ª]
 	
-	float sideCameraBeginTime = 0;			//ì‚¬ì´ë“œ ì¹´ë©”ë¼ ì‹œì‘ ì‹œê°„
-	float sideCameraPassTime = 0;			//ì‚¬ì´ë“œ ì¹´ë©”ë¼ë¡œ ë³´ì—¬ì£¼ê³  í˜ëŸ¬ê°„ ì‹œê°„ 
+	float sideCameraBeginTime = 0;			//»çÀÌµå Ä«¸Ş¶ó ½ÃÀÛ ½Ã°£
+	float sideCameraPassTime = 0;			//»çÀÌµå Ä«¸Ş¶ó·Î º¸¿©ÁÖ°í Èê·¯°£ ½Ã°£ 
 
 	float traceCameraBreakTime = 0;
 
-	float PuttingPassTime = 0;				//í¼íŒ… ì§„í–‰ ì‹œê°„
+	float PuttingPassTime = 0;				//ÆÛÆÃ ÁøÇà ½Ã°£
+	float LandingTime = 0;					//ÇÏ°­ ÁøÇà ½Ã°£
+	float ImpactedTime = 0;
+
+	bool bIsTraceCameraSocketChangeLerping = true;					//(±¸)ÃßÀû Ä«¸Ş¶ó Socket º¯µ¿ Lerp ÁßÀÎ°¡? 
+	float TraceCameraSocketChangeLerpTime = 1.0f;					//Lerp ¼Ò¿ä ½Ã°£
+	float TraceCameraSocketChangeTime = 0;							//Lerp ÁøÇàµµ
+
+	bool bIsTraceCameraLagChangeLerping = true;						//(±¸)ÃßÀû Ä«¸Ş¶ó Apex ±ÙÃ³¿¡¼­ ´ç±â´Â ¿¬ÃâÀ» À§ÇÑ LagSpeed º¯µ¿ Lerp 2 ÁßÀÎ°¡?
+	float TraceCameraLagLerpTime = 2.0f;							//Lerp ¼Ò¿ä ½Ã°£
+	float TraceCameraLagChangeTime = 0;								//Lerp ÁøÇàµµ
+
+	bool bIsTraceCameraLagChangeLerping2 = true;					//(±¸)ÃßÀû Ä«¸Ş¶ó ÇÏ°­½Ã ´õ ¹ÙÂ¦ ÂÑ¾Æ°¡´Â ¿¬ÃâÀ» À§ÇÑ LagSpeed º¯µ¿ Lerp
+	float TraceCameraLagLerpTime2 = 2.0f;							//Lerp ¼Ò¿ä ½Ã°£
+	float TraceCameraLagChangeTime2 = 0;							//Lerp ÁøÇàµµ
+
+	bool bIsTraceCameraRotateChangeAfterImpactedLerping = true;
+	float TraceCameraRotateChangeAfterImpactedTime = 5.0f;
+	float TraceCameraRotateTimeChangeAfterImpactedTime = 0;
+
+	bool bIsTraceCameraSocketChangeLerping2 = true;					//(±¸)ÃßÀû Ä«¸Ş¶ó °øÀÌ Áö¸é¿¡ ´êÀº Á÷ÈÄ È¸Àü ´À¸®°Ô ÇÏ±â À§ÇÑ Lerp ÁßÀÎ°¡?
+	float TraceCameraSocketChangeLerpTime2 = 2.0f;					//Lerp ¼Ò¿ä ½Ã°£
+	float TraceCameraSocketChangeTime2 = 0;							//Lerp ÁøÇàµµ
+
+	bool bIsZoomInLerping = true;
+	float ZoomInLerpTime = 3.5f;
+	float ZoomInPassTime = 0;
+
+	float SkyTraceCameraDownVectorAfterLandingLerpTime = 0.5f;			//Lerp ¼Ò¿ä ½Ã°£
+	float SkyTraceCameraDownVectorAfterLandingPassTime = 0;				//Lerp ÁøÇàµµ
 	
 	bool FlagCameraToReverseCamera = true;
 	bool IsBadPlaceHitCameraLocated = false;
 
-	bool IsUpperOutSafeAreaDetected = false;		//ìœ—ìª½ìœ¼ë¡œ SafeAreaë¥¼ ë²—ì–´ë‚œ ê²½ìš°ê°€ ìˆì—ˆëŠ”ê°€?
-	bool IsBottomOutSafeAreaDetected = false;		//ì•„ë«ìª½ìœ¼ë¡œ SafeAreaë¥¼ ë²—ì–´ë‚œ ê²½ìš°ê°€ ìˆì—ˆëŠ”ê°€?
+	bool IsUpperOutSafeAreaDetected = false;		//À­ÂÊÀ¸·Î SafeArea¸¦ ¹ş¾î³­ °æ¿ì°¡ ÀÖ¾ú´Â°¡?
+	bool IsBottomOutSafeAreaDetected = false;		//¾Æ·§ÂÊÀ¸·Î SafeArea¸¦ ¹ş¾î³­ °æ¿ì°¡ ÀÖ¾ú´Â°¡?
 
-	bool IsBeforeApexCamNumDecided = false;
-	bool IsAfterApexCamNumDecided = false;		//Camera ë‘ë²ˆì§¸ Step ì˜ ì¹´ë©”ë¼ í˜•íƒœê°€ ê²°ì •ë˜ì—ˆëŠ”ê°€?
+	bool IsBeforeApexCamNumDecided = false;			//Camera Ã¹¹øÂ° Step ÀÇ Ä«¸Ş¶ó ÇüÅÂ°¡ °áÁ¤µÇ¾ú´Â°¡?
+	bool IsAfterApexCamNumDecided = false;			//Camera µÎ¹øÂ° Step ÀÇ Ä«¸Ş¶ó ÇüÅÂ°¡ °áÁ¤µÇ¾ú´Â°¡?
 
 	bool IsDecalRequestAvailable = false;
 	bool IsInitTraceCamera = false;
 
-	FVector BeginForwardDir = FVector::ForwardVector;		//ì‹œì‘ ì§í›„ ì „ë°© ë²¡í„°
+	bool IsTooClosePutting = false;
 	
-	int32 CameraStep = 0; 
+	bool IsApexPositionSet = false;				//ApexÁöÁ¡À» ÀúÀåÇß´Â°¡?
+	bool IsLowApexInitialized = false;			//LowApexÀÎÁö ÀÌ¹Ì È®ÀÎÇß´Â°¡?
+	bool IsLowApex = false;						//LowApexÀÎ°¡?
+	bool IsApexUnderGroundFix = false;			//Ä«¸Ş¶ó °æ·Î Áö¸é º¸Á¤ ±âÁØ ³ôÀÌº¸´Ù Apex°¡ ¾Æ·¡ÀÎ°¡?
 
+	bool IsTraceCameraPrevAlreadyStopped = false;
+	bool IsPassedCamBrakePosition = false;
+	bool IsRemoveCamPointToEndPoint = false;
+
+	bool IsAlreadyPauseTrace = false;
+
+	bool IsDebugSkyTraceState = false;
+	bool IsPredictApexSet = false;
+
+	const float GreenTrailLimitHeight = 200.0f;
+	const float NoneGreenTrailLimitHeight = 300.0f;
+
+	bool IsFoliageTimerInitialized = false;
+	
+	FVector BeginForwardDir = FVector::ForwardVector;		//½ÃÀÛ Á÷ÈÄ Àü¹æ º¤ÅÍ
+	
+	int32 CameraStep = 0;
+
+	FVector apexPosition = FVector::ZeroVector;
 	FVector oldLocation = FVector::ZeroVector;
 	FVector startLocation = FVector::ZeroVector;
 
 	FVector sideCameraLocation = FVector::ZeroVector;
 	FVector predictLandingPosition = FVector::ZeroVector;
+	FVector predictLandingPositionForSkyTrace = FVector::ZeroVector;
 	FVector predictPuttingPosition = FVector::ZeroVector;
 	FVector predictApexPosition = FVector::ZeroVector;
 	FVector reverseLandFixedCameraLocation = FVector::ZeroVector;
 	
 	FRotator StartPlayerRot = FRotator::ZeroRotator;
 
-	FVector2D BackTraceDir2D = FVector2D::ZeroVector; // ì¶”ì ì¹´ë©”ë¼ (ì—­ë°©í–¥) ì˜ ë°©í–¥
+	FVector2D BackTraceDir2D = FVector2D::ZeroVector; // ÃßÀûÄ«¸Ş¶ó (¿ª¹æÇâ) ÀÇ ¹æÇâ
 
 	float PrevBallToHoleDist = 10000;
 	
 	FVector PuttingTraceCameraDir = FVector::ZeroVector;
-	float PuttingTraceCameraLastCameraDist = 300;			//ì •ë°©í–¥ì—ì„œ ê³µì´ ë°©í–¥ì´ êº¾ì¸ ì§í›„ ì¹´ë©”ë¼ì™€ ê³µ ì‚¬ì´ ê±°ë¦¬
+	float PuttingTraceCameraLastCameraDist = 300;			//Á¤¹æÇâ¿¡¼­ °øÀÌ ¹æÇâÀÌ ²ªÀÎ Á÷ÈÄ Ä«¸Ş¶ó¿Í °ø »çÀÌ °Å¸®
 	bool IsPuttingBallForwardMove = true;
 	bool IsPuttingZoomCameraSetLocationRotation = false;
+
+	FVector BallVelocityBeforeImpacted = FVector::ZeroVector;
+	FVector WindVector = FVector::ZeroVector;
+	float WindPower = 0.0f;
 	
 	FVector2d ScreenSize = FVector2d(1920, 1080);
 
 	bool IsBallImpacted = false;
-	FVector BallImpactedPosition = FVector::ZeroVector;							//ê³µ ì§€ë©´ ì¶©ëŒ ì§í›„ ê³µ ìœ„ì¹˜
-	FVector TraceCameraPrevLocationAfterBallImpacted = FVector::ZeroVector;		//ê³µ ì§€ë©´ ì¶©ëŒ ì§í›„ ì¶”ì  ì¹´ë©”ë¼ ìœ„ì¹˜
+	bool IsBallAlmostImpacted = false;
+	bool PrevBallImpacted = false;
+	bool IsUnder100Shot = false;
+
+	bool IsSkyTraceImpactedPathAdded = false;
+	bool CanAddLandingPathLine = true;		//Ãß°¡ ¶óÀÎÀ» ±×¸± ¼ö ÀÖ´Â »óÅÂÀÎ°¡?
+	bool IsAlreadyAddBezierLandingLine = false;		//ÀÌ¹Ì Bezier Ä¿ºê ¶óÀÎÀ» ±×¸° »óÅÂÀÎ°¡?
+	
+	FVector BallImpactedPosition = FVector::ZeroVector;							//°ø Áö¸é Ãæµ¹ Á÷ÈÄ °ø À§Ä¡
+	FVector TraceCameraPrevLocationAfterBallImpacted = FVector::ZeroVector;		//°ø Áö¸é Ãæµ¹ Á÷ÈÄ ÃßÀû Ä«¸Ş¶ó À§Ä¡
 	
 	FVector BallForwardVectorAfterImpact = FVector::ZeroVector;
 	
@@ -242,6 +362,7 @@ private:
 	
 	FTimerHandle TreeHitHandle;
 	FTimerHandle PuttingTraceCameraWaitHandle;
+	FTimerHandle SkyTraceHandle;
 	
 	class PercentageData
 	{
@@ -251,11 +372,17 @@ private:
 
 		PercentageData(int32 Min, int32 Max);
 	};
-
+	
 	float ShiftRotateAngle = 0;
-	float ShiftSecondShotOffSetAngle = -1.6f;		//FOV ì°¨ì´ì— ë”°ë¥¸ ì„¸ì»¨ìƒ· OffSet íšŒì „ê°’
-	float ShiftPuttingShotOffSetAngle = 1.0f;		//FOV ì°¨ì´ì— ë”°ë¥¸ í¼íŒ… OffSet íšŒì „ê°’
+	float ShiftSecondShotOffSetAngle = -1.6f;		//FOV Â÷ÀÌ¿¡ µû¸¥ ¼¼ÄÁ¼¦ OffSet È¸Àü°ª
+	float ShiftPuttingShotOffSetAngle = 1.0f;		//FOV Â÷ÀÌ¿¡ µû¸¥ ÆÛÆÃ OffSet È¸Àü°ª
 	
 	float ShiftLeftAmount = 0;
 	float ShiftOffsetRotate = 0.4f;
+
+	float DistanceAlongSpline = 0.0f;
+	float CameraSpeed = 100.0f;
+
+	ASGCameraRailActor* CameraRailActor;
+	FTimerHandle FoliageFindTimer;					//FoliageActor¸¦ Ã£´Â ÇÔ¼ö¸¦ ÁÖ±âÀûÀ¸·Î È£ÃâÇÏ±â À§ÇÔ
 };
