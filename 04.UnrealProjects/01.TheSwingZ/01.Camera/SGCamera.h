@@ -60,6 +60,7 @@ private:
 	UFirstCameraRecord* GetTargetFirstCameraPriority(int32 Priority, ASGPlayerCharacter* Player);
 
 	TArray<USecondCameraRecord*> GetSecondCameraRecordsByPriority(int32 ID);
+	TArray<USecondCameraRecord*> GetSecondCameraRecordsByConditions(FString Name, float BallPower, float LaunchDegree);
 	USecondCameraRecord* GetSecondCameraRecordByIndex(int32 ID);
 	USecondCameraRecord* GetLastSecondCameraRecord();
 	USecondCameraRecord* GetTargetSecondCameraPriority(int32 Priority, ASGPlayerCharacter* Player);
@@ -226,6 +227,7 @@ private:
 	bool IsPredictGreenLanding = false;
 
 	bool IsBadImpacted = false;				//잘못 맞은 경우
+	bool IsTooCloseCalled = false;
 	
 	float flyingTime	= 0;
 	const float LandingWaitTime = 1.5f;
@@ -306,6 +308,9 @@ private:
 	const float GreenTrailLimitHeight = 200.0f;
 	const float NoneGreenTrailLimitHeight = 300.0f;
 
+	const float OcclusionGrassCheckTimeInterval = 1.0f;
+	float OcclusionCheckGrassPassTime = 0.0f;
+
 	bool IsFoliageTimerInitialized = false;
 	
 	FVector BeginForwardDir = FVector::ForwardVector;		//시작 직후 전방 벡터
@@ -357,6 +362,7 @@ private:
 	ASGIPFinder* IPFinder = nullptr;
 
 	UFirstCameraRecord* SelectedFirstCameraRecord = nullptr;
+	TArray<USecondCameraRecord*> SecondCameraRecordPool;
 	USecondCameraRecord* SelectedSecondCameraRecord = nullptr;
 	UPuttCameraRecord* SelectedPuttingCameraRecord = nullptr;
 	
