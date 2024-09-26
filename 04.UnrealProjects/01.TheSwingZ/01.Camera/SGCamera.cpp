@@ -39,6 +39,10 @@ void ASGCamera::BeginPlay()
 	SpawnCamera();
 
 	IsDecalRequestAvailable = false;
+	
+	GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
+	PlayerController = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
+	PlayerChar = Cast<ASGPlayerCharacter>(PlayerController->GetCharacter());
 }
 
 void ASGCamera::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -298,23 +302,28 @@ void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
  	if(drivingMode)
 	{
 #ifdef ENABLE_DEBUG_CAMERA
- 		bool IsDebugCameraExist = PHYSICAL_MANAGER->GetCameraOneIndex() != 0;
- 		if(IsDebugCameraExist)
+ 		if(IsValid(PHYSICAL_MANAGER))
  		{
- 			SelectedFirstCameraRecord = GetTargetFirstCameraPriority(1, PlayerChar);
- 			BeforeApexCamNum = SelectedFirstCameraRecord != nullptr ?
-				GetBeforeApexCamNumFromStringValue(SelectedFirstCameraRecord->Camera_Result) : 2;
- 		}
- 		else
- 		{
- 			if(drivingMode->GetIsPutter()) { BeforeApexCamNum = 0; }
- 			else { BeforeApexCamNum = 2; }
+ 			bool IsDebugCameraExist = PHYSICAL_MANAGER->GetCameraOneIndex() != 0;
+ 			if(IsDebugCameraExist)
+ 			{
+ 				SelectedFirstCameraRecord = GetTargetFirstCameraPriority(1, PlayerChar);
+ 				BeforeApexCamNum = SelectedFirstCameraRecord != nullptr ?
+					GetBeforeApexCamNumFromStringValue(SelectedFirstCameraRecord->Camera_Result) : 2;
+ 			}
+ 			else
+ 			{
+ 				if(drivingMode->GetIsPutter()) { BeforeApexCamNum = 0; }
+ 				else { BeforeApexCamNum = 2; }
+ 			}
  		}
 #endif
 	}
 	else
 	{
 		SelectedFirstCameraRecord = GetTargetFirstCameraPriority(1, PlayerChar);
+		SecondCameraRecordPool = GetSecondCameraRecordsByConditions(SelectedFirstCameraRecord->Camera_Result, ballPower, launchAngle);
+		
 		BeforeApexCamNum = SelectedFirstCameraRecord != nullptr ?
 			GetBeforeApexCamNumFromStringValue(SelectedFirstCameraRecord->Camera_Result) : 2;
 		
@@ -346,7 +355,11 @@ void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
 	
 	PlayerChar->UpdateBallTail(IsTraceCamera);
 
-	IsPutting = PlayerChar->IsOnApronORGreen() && (PHYSICAL_MANAGER->GetDrivingModeType() == EDrivingModeType::Putter);
+	if(!IsValid(PHYSICAL_MANAGER)){ IsPutting = PlayerChar->IsOnApronORGreen(); }
+	else
+	{
+		IsPutting = PlayerChar->IsOnApronORGreen() && (PHYSICAL_MANAGER->GetDrivingModeType() == EDrivingModeType::Putter);	
+	}
 	
 	if (IsDrivingMode)
 	{
@@ -424,13 +437,16 @@ void ASGCamera::NewImpactCameraSettings(ERenderType::Type RenderType)
 		CourseMode->GetWindArrowDirection(WindVector);
 	}
 
+	if(OcclusionMPCInstance)
+	{
+		OcclusionMPCInstance->SetScalarParameterValue("EnableGrassOcclusion", 0.0f);
+	}
 	IsUnder100Shot = GetIsUnder100(PlayerChar, holecupLocation);
 }
 
 
 void ASGCamera::EndShot()
 {
-	GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if(IsValid(GameInst)){ PlayerController = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController()); }
 	if(IsValid(PlayerController)) { PlayerChar = Cast<ASGPlayerCharacter>(PlayerController->GetCharacter()); }
 
@@ -445,6 +461,7 @@ void ASGCamera::EndShot()
 		if(OcclusionMPCInstance)
 		{
 			OcclusionMPCInstance->SetVectorParameterValue("BallLocation", PlayerChar->GetActorLocation());
+			OcclusionMPCInstance->SetScalarParameterValue("EnableGrassOcclusion", 1.0f);
 		}
 	}
 
@@ -471,7 +488,8 @@ void ASGCamera::EndShot()
 	{
 		GetWorld()->GetTimerManager().ClearTimer(FoliageFindTimer);
 	}
-	
+
+	OcclusionCheckGrassPassTime = 0;
 	LandingTime = 0;
 	ImpactedTime = 0;
 	
@@ -493,6 +511,7 @@ void ASGCamera::EndShot()
 	IsRemoveCamPointToEndPoint = false;
 	IsPredictGreenLanding = false;
 	IsPuttingZoomCameraSetLocationRotation = false;
+	IsTooCloseCalled = false;
 	
 	CanAddLandingPathLine = true;
 	
@@ -579,7 +598,6 @@ void ASGCamera::EndShot()
 
 	PuttingZoomCamera->GetCamera()->FieldOfView = 80;
 	
-	GameInst = Cast<USGGameInstance>(GetWorld()->GetGameInstance());
 	if (nullptr != GameInst)
 	{
 		PlayerController = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
@@ -631,6 +649,19 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 
 	ASGPlayerCharacter* Player = Cast<ASGPlayerCharacter>(PlayerController->GetPawn());
 	if (nullptr == Player) return;
+
+	if(IsBallImpacted) { OcclusionCheckGrassPassTime += DeltaTime; }
+	
+	if(OcclusionCheckGrassPassTime > OcclusionGrassCheckTimeInterval)
+	{
+		//TODO 공이 지면에 닿은 이후 부터 Tick보다는 낮은 주기로 OB인지 아닌지를 판단하여 OB가 아닌 경우 잔디 Occlusion 활성화
+		int GroundType = Player->GetMovingStimpMeterType();
+		float IsEnableGrassOcclusion = GroundType < 7 ? 1.0f : 0.0f; 
+		OcclusionMPCInstance->SetScalarParameterValue("EnableGrassOcclusion", IsEnableGrassOcclusion);
+		
+		// SG_LOG(Log, "SJW 777 GroundType Check....%i", GroundType);
+		OcclusionCheckGrassPassTime = 0;
+	}
 
 	if(OcclusionMPC)
 	{
@@ -785,8 +816,6 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 				if(TraceCamera->GetSpringArm()->bEnableCameraRotationLag)
 					TraceCamera->GetSpringArm()->bEnableCameraRotationLag = false;
 			}
-
-			TraceCameraWork(PlayerController, Player, DeltaTime);
 			
 			if(CanRotateTraceCamera && IsPutting)
 			{
@@ -950,18 +979,21 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 						if(IsLanding && IsAvailableThirdCamera(PlayerController, Player) && !IsHitBadPlace)
 						{
 #ifdef ENABLE_DEBUG_CAMERA
-							int DebugThirdCameraIndex = PHYSICAL_MANAGER->GetCameraThreeIndex();
-							bool IsDebugCameraExist = DebugThirdCameraIndex != 0;
-							if(IsDebugCameraExist)
+							if(IsValid(PHYSICAL_MANAGER))
 							{
-								SG_LOG(Log, "[DebugCamera] Third Camera");
+								int DebugThirdCameraIndex = PHYSICAL_MANAGER->GetCameraThreeIndex();
+								bool IsDebugCameraExist = DebugThirdCameraIndex != 0;
+								if(IsDebugCameraExist)
+								{
+									SG_LOG(Log, "[DebugCamera] Third Camera");
 								
-								AfterApexCamNum = 1;
+									AfterApexCamNum = 1;
 
-								InitReverseFixedCameraWork(PlayerController, Player->GetActorLocation());
-								ReverseFixedCameraWork(PlayerController, Player);
+									InitReverseFixedCameraWork(PlayerController, Player->GetActorLocation());
+									ReverseFixedCameraWork(PlayerController, Player);
 
-								return;
+									return;
+								}
 							}
 #endif
 							
@@ -1036,29 +1068,33 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 			}
 			else
 			{
-				if(!IsDrivingMode) DecideAfterCamNum();
-
-#ifdef ENABLE_DEBUG_CAMERA
+ 				if(!IsDrivingMode) DecideAfterCamNum();
 				else
 				{
-					bool IsDebugCameraIndexExist = PHYSICAL_MANAGER->GetCameraTwoIndex() != 0;
-					if(IsDebugCameraIndexExist)
-					{
-						DecideAfterCamNum();
-					}
-					else
-					{
-						if(BeforeApexCamNum == 0) { AfterApexCamNum = -1; }
-						else { AfterApexCamNum = 3; }
-					}
+					IsAfterApexCamNumDecided = true;
+					AfterApexCamNum = 3;
+					return;
 				}
+ #ifdef ENABLE_DEBUG_CAMERA
+ 				// {
+ 				// 	bool IsDebugCameraIndexExist = PHYSICAL_MANAGER->GetCameraTwoIndex() != 0;
+ 				// 	if(IsDebugCameraIndexExist)
+ 				// 	{
+ 				// 		DecideAfterCamNum();
+ 				// 	}
+ 				// 	else
+ 				// 	{
+ 				// 		if(BeforeApexCamNum == 0) { AfterApexCamNum = -1; }
+ 				// 		else { AfterApexCamNum = 3; }
+ 				// 	}
+ 				// }
 
-				if(IsDebugSkyTraceState){ AfterApexCamNum = 6; }
+ 				if(IsDebugSkyTraceState){ AfterApexCamNum = 6; }
 				
-				//test code
+				// test code
 				// AfterApexCamNum = 2;
-				//end test code
-#endif
+				// end test code
+ #endif
 				
 				switch (AfterApexCamNum)
 				{
@@ -1072,7 +1108,7 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 					break;
 
 				case 3:
-					InitTraceCameraWork(PlayerController, Player);
+					if(BeforeApexCamNum != 3) InitTraceCameraWork(PlayerController, Player);
 					break;
 
 				case 4:
@@ -1084,11 +1120,13 @@ void ASGCamera::TickCameraWork(float DeltaTime)
 					break;
 
 				case 6:
-					InitSkyTraceCameraWork(PlayerController, Player);
+					if(BeforeApexCamNum != 3) InitSkyTraceCameraWork(PlayerController, Player);
+					//Note. BeforeApexCamNum이 추적카메라인 경우, 한프레임 아무것도 호출되지 않는 경우
+					//카메라 멈추는 듯한 느낌을 주는 것으로 판단되어 그 경우, SkyTraceCameraWork를 호출해준다.
+					else { SkyTraceCameraWork(PlayerController, Player, DeltaTime); }
 					break;
 					
 				case 7:
-					//이미 시작 고정인 경우 호출하지 않는다.
 					if(BeforeApexCamNum != 1) InitFixedCameraWork(PlayerController, Player);
 					break;
 				}
@@ -1342,8 +1380,11 @@ void ASGCamera::InitSideCameraWork(APlayerController* Controller, ASGPlayerChara
 	bool ConditionResult = IsFineConditionToSideCamera(sideSpinRate, launchSideAngleInDegree);
 
 #ifdef ENABLE_DEBUG_CAMERA
-	bool IsDebugIndexExist = PHYSICAL_MANAGER->GetCameraTwoIndex() != 0;
-	if(IsDebugIndexExist) ConditionResult = true;
+	if(IsValid(PHYSICAL_MANAGER))
+	{
+		bool IsDebugIndexExist = PHYSICAL_MANAGER->GetCameraTwoIndex() != 0;
+		if(IsDebugIndexExist) ConditionResult = true;
+	}
 #endif
 	
 	if(ConditionResult)
@@ -2214,7 +2255,7 @@ void ASGCamera::DrivingModeTraceCameraSubWork(APlayerController* Controller, ASG
 #pragma endregion
 	}
 
-	#pragma region CameraRotate
+#pragma region CameraRotate
 	if(CanRotateTraceCamera)
 	{
 		if(IsBallImpacted)
@@ -2237,12 +2278,12 @@ void ASGCamera::DrivingModeTraceCameraSubWork(APlayerController* Controller, ASG
 		{
 			FRotator CurrentRot = TraceCamera->GetCamera()->GetComponentRotation();
 			FRotator TargetRot = FRotationMatrix::MakeFromX(Player->GetActorLocation() - TraceCamera->GetCamera()->GetComponentLocation()).Rotator();
-		
+			
 			FRotator ResultRot = FMath::Lerp(CurrentRot, TargetRot, 0.5f);
 			TraceCamera->GetCamera()->SetWorldRotation(ResultRot);
 		}
 	}
-	#pragma endregion
+#pragma endregion
 }
 
 //(역방향) 지면 고정 카메라 Tick 단위 처리
@@ -3093,11 +3134,16 @@ TArray<UFirstCameraRecord*> ASGCamera::GetFirstCameraRecordsByPriority(int32 ID)
 UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGPlayerCharacter* Player)
 {
 #ifdef ENABLE_DEBUG_CAMERA
-	int DebugFirstCameraIndex = PHYSICAL_MANAGER->GetCameraOneIndex();
-	bool IsDebugIndexExist = DebugFirstCameraIndex != 0;
-	if(IsDebugIndexExist)
+	if(IsValid(PHYSICAL_MANAGER))
 	{
-		return GetFirstCameraRecordByIndex(DebugFirstCameraIndex);
+		int DebugFirstCameraIndex = PHYSICAL_MANAGER->GetCameraOneIndex();
+		bool IsDebugIndexExist = DebugFirstCameraIndex != 0;
+		if(IsDebugIndexExist)
+		{
+			// SG_LOG(Log, "SJW [DebugCamera] First Camera %i", DebugFirstCameraIndex);
+		
+			return GetFirstCameraRecordByIndex(DebugFirstCameraIndex);
+		}
 	}
 #endif
 	
@@ -3228,11 +3274,6 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 			return GetTargetFirstCameraPriority(Priority, Player);
 		}
 
-		// if(IsValid(TargetRecord))
-		// {
-		// 	SG_LOG(Log, "SJW 111 Selected FirstCameraPriority Index %i, Priority %i", TargetRecord->Index, Priority);
-		// }
-
 		return TargetRecord;
 	}
 	
@@ -3240,25 +3281,36 @@ UFirstCameraRecord* ASGCamera::GetTargetFirstCameraPriority(int32 Priority, ASGP
 	return nullptr;
 }
 
+TArray<USecondCameraRecord*> ASGCamera::GetSecondCameraRecordsByConditions(FString Name, float BallPower, float LaunchDegree)
+{
+	int TeeShotValue = IsTeeShot ? 1 : 0;
+	TArray<USecondCameraRecord*> TargetSecondCameraRecords = GameInst->GetTableManager()->GetSecondCameraRecordsByFirstCameraConditions(Name, TeeShotValue, BallPower, LaunchDegree);
+
+	//1. 조건이 확실히 만족 안되는 Records들은 목록에서 제거한다.
+	return TargetSecondCameraRecords;
+}
+
 USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, ASGPlayerCharacter* Player)
 {
 #ifdef ENABLE_DEBUG_CAMERA
-	int DebugSecondCameraIndex = PHYSICAL_MANAGER->GetCameraTwoIndex();
-	bool IsDebugIndexExist = DebugSecondCameraIndex != 0;
-	if(IsDebugIndexExist)
+	if (IsValid(PHYSICAL_MANAGER))
 	{
-		SG_LOG(Log, "SJW [DebugCamera] Second Camera %i", DebugSecondCameraIndex);
+		int DebugSecondCameraIndex = PHYSICAL_MANAGER->GetCameraTwoIndex();
+		bool IsDebugIndexExist = DebugSecondCameraIndex != 0;
+		if(IsDebugIndexExist)
+		{
+			SG_LOG(Log, "SJW [DebugCamera] Second Camera %i", DebugSecondCameraIndex);
 
-		return GetSecondCameraRecordByIndex(DebugSecondCameraIndex);
+			return GetSecondCameraRecordByIndex(DebugSecondCameraIndex);
+		}
 	}
 #endif
 	
-	auto TargetRecords = GetSecondCameraRecordsByPriority(Priority);
-	if(TargetRecords.Num() > 0)
+	if(SecondCameraRecordPool.Num() > 0)
 	{
 		TArray<USecondCameraRecord*> ValidRecords;	//조건을 최종적으로 만족하는 Record 그룹
 
-		for (auto TargetRecord : TargetRecords)
+		for (auto TargetRecord : SecondCameraRecordPool)
 		{
 			//1. 시작 카메라 조건 검사
 			{
@@ -3357,6 +3409,8 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 							continue;
 						}
 					}
+					//지형 검사가 필요하지만, 바운더리를 벗어난 경우
+					else { continue; }
 				}
 			}
 
@@ -3377,10 +3431,8 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 		//조건을 만족하는 그룹이 없는 경우 다음 우선순위 진행
 		if(ValidRecords.Num() == 0)
 		{
-			// SG_LOG(Log, "GetTargetSecondCameraPriority NextPriority Case a...");
-			
-			Priority += 1;
-			return GetTargetSecondCameraPriority(Priority, Player);
+			SG_LOG(Log, "Exception Case 1002...");
+			return GetLastSecondCameraRecord();
 		}
 		
 		//확률 테이블 세팅
@@ -3407,29 +3459,27 @@ USecondCameraRecord* ASGCamera::GetTargetSecondCameraPriority(int32 Priority, AS
 		{
 			if((RndResult >= PercentageDatas[i].Min) && (RndResult < PercentageDatas[i].Max))
 			{
-				TargetRecord = TargetRecords[i];
+				TargetRecord = ValidRecords[i];
 				break;
 			}
 		}
 
 		if(TargetRecord == nullptr)
 		{
-			SG_LOG(Log, "GetTargetSecondCameraPriority NextPriority Case b...");
-			
-			Priority += 1;
-			return GetTargetSecondCameraPriority(Priority, Player);
+			SG_LOG(Log, "Exception Case 1001...");
+			return GetLastSecondCameraRecord();
 		}
 
 		if(IsValid(TargetRecord))
 		{
-			SG_LOG(Log, "SJW 111 Selected SecondCameraRecord Index %i, Priority %i", TargetRecord->Index, Priority);
+			SG_LOG(Log, "SJW 111 Selected SecondCameraRecord Index %i, Priority %i", TargetRecord->Index, TargetRecord->Priority);
 		}
 		
 		return TargetRecord;
 	}
 
 	//다음 우선순위가 비어있는 경우(연속적이지 않은 경우)에 대한 예외처리
-	if((TargetRecords.Num() == 0) && (Priority < GetLastSecondCameraRecord()->Priority))
+	if((SecondCameraRecordPool.Num() == 0) && (Priority < GetLastSecondCameraRecord()->Priority))
 	{
 		Priority += 1;
 		return GetTargetSecondCameraPriority(Priority, Player);
@@ -3458,7 +3508,7 @@ USecondCameraRecord* ASGCamera::GetLastSecondCameraRecord()
 	USGShotCameraTable* CameraTable = GameInst->GetTableManager()->GetShotCameraTable();
 	if(nullptr == CameraTable) return nullptr;
 
-	return CameraTable->m_SecondCameraSheet->arrayTable.Last();
+	return SecondCameraRecordPool.Last();
 }
 
 int32 ASGCamera::GetBeforeApexCamNumFromStringValue(FString TargetValue)
@@ -3492,17 +3542,20 @@ bool ASGCamera::IsAvailableThirdCamera(APlayerController* Controller, ASGPlayerC
 	int32 LandCameraActiveCond = SelectedSecondCameraRecord->Third_Camera_Active;
 	
 #ifdef ENABLE_DEBUG_CAMERA
-	int DebugThirdCameraIndex = PHYSICAL_MANAGER->GetCameraThreeIndex();
-	bool IsDebugCamera = PHYSICAL_MANAGER->GetCameraThreeIndex() != 0;
-	if(IsDebugCamera)
+	if(IsValid(PHYSICAL_MANAGER))
 	{
-		if(DebugThirdCameraIndex == -1)
+		int DebugThirdCameraIndex = PHYSICAL_MANAGER->GetCameraThreeIndex();
+		bool IsDebugCamera = PHYSICAL_MANAGER->GetCameraThreeIndex() != 0;
+		if(IsDebugCamera)
 		{
-			LandCameraActiveCond = 0;
-		}
-		else if(DebugThirdCameraIndex == 1)
-		{
-			LandCameraActiveCond = 1;
+			if(DebugThirdCameraIndex == -1)
+			{
+				LandCameraActiveCond = 0;
+			}
+			else if(DebugThirdCameraIndex == 1)
+			{
+				LandCameraActiveCond = 1;
+			}
 		}
 	}
 #endif
@@ -4081,7 +4134,7 @@ void ASGCamera::SkyTraceCameraWork(APlayerController* Controller, ASGPlayerChara
 				CameraRailActor->PauseTrace();
 				IsAlreadyPauseTrace = true;
 			}
-
+	
 			if(!IsOBZPos(predictLandingPositionForSkyTrace))
 			{
 				if(IsUnder100Shot)
@@ -4196,7 +4249,7 @@ void ASGCamera::SkyTraceCameraWork(APlayerController* Controller, ASGPlayerChara
 	FVector ShiftedCamToBallDirVector = NewLocationToBallLocation.RotateAngleAxis(ShiftRotateAngle + OffSetRotateAngle, FVector::ZAxisVector);
 	FRotator TargetRotation = FRotationMatrix::MakeFromX(ShiftedCamToBallDirVector).Rotator();
 	FRotator ResultRot = FMath::Lerp(CurrentRotation, TargetRotation, 0.02f);
-
+	
 	if(IsUnder100Shot)
 	{
 		if(!IsBallImpacted && BottomUnsafe)
@@ -4222,31 +4275,28 @@ void ASGCamera::SkyTraceCameraWork(APlayerController* Controller, ASGPlayerChara
 			FVector2D TargetScreenPosition = UpperUnSafe ?
 				FVector2D(ViewportSize.X * 0.5f, ViewportSize.Y * 0.2f) :
 				FVector2D(ViewportSize.X * 0.5f, ViewportSize.Y * 0.8f);
-		
+			
 			FVector2D Delta = TargetScreenPosition - BallScreenPosition;
-		
+			
 			float RotationSpeed = 1.0f; // 카메라 회전 속도 조절
 
-			if (Delta.Size() > KINDA_SMALL_NUMBER)
-			{
-				FRotator NewRotation = SkyTraceCamera->GetCamera()->GetComponentRotation();
-				NewRotation.Pitch += Delta.Y * RotationSpeed * DeltaTime;
-
-				SkyTraceCamera->GetCamera()->SetWorldRotation(NewRotation);
-			}
+			FRotator PrevRotator = SkyTraceCamera->GetCamera()->GetComponentRotation();
+			FRotator TargetRotator = PrevRotator;
+			TargetRotator.Pitch += Delta.Y * RotationSpeed * DeltaTime;
+			
+			FRotator TargetLerpedRot = FMath::Lerp(PrevRotator, TargetRotator, 0.5f);
+			SkyTraceCamera->GetCamera()->SetWorldRotation(TargetLerpedRot);
 		}
 	}
 
 	if(IsBallImpacted || IsBadImpacted)
 	{
-		float TargetStopDist = IsLowApex ? SkyTraceLowApexStopDist : SkyTraceStopDist;
-		bool IsTooClose = TargetDist < 200;
+		bool IsTooClose = TargetDist < 300;
+		if(IsTooClose) IsTooCloseCalled = true;
 		FVector CameraForwardDir = SkyTraceCamera->GetCamera()->GetForwardVector();
 		CameraForwardDir.Z = 0;
 		FVector BallForwardDir = Player->GetVelocity();
 		BallForwardDir.Z = 0;
-		float DotCamBallRes = FVector::DotProduct(CameraForwardDir, BallForwardDir);
-		// SG_LOG(Log, "DotCamBallRes : %f", DotCamBallRes);
 
 		if(!IsChangedSafeAreaRatioAfterImpacted)
 		{
@@ -4254,15 +4304,20 @@ void ASGCamera::SkyTraceCameraWork(APlayerController* Controller, ASGPlayerChara
 			IsChangedSafeAreaRatioAfterImpacted = true;
 		}
 		
-		if(IsTooClose && (DotCamBallRes < 0))
+		if(IsTooCloseCalled)
 		{
 			FVector PrevCameraLocation = SkyTraceCamera->GetCamera()->GetComponentLocation();
-			FVector TargetLocation = BallLocation - BallForwardVectorAfterImpact * 200;
+			FVector TargetLocation = BallLocation - BallForwardVectorAfterImpact * 500;
+			float DistCamToBall = FVector::Dist2D(PrevCameraLocation, BallLocation);
+			
 			TargetLocation.Z = PrevCameraLocation.Z;
 			GroundCheck(TargetLocation, TargetLocation);
 			
 			FVector LerpedTargetLocation = FMath::Lerp(PrevCameraLocation, TargetLocation, 0.5f);
 			SkyTraceCamera->GetCamera()->SetWorldLocation(LerpedTargetLocation);
+
+			SG_LOG(Log, "SJW [BackStepTest] DistCamToBall %f", DistCamToBall);
+			SG_LOG(Log, "SJW [BackStepTest] 1001.......");
 		}
 		else
 		{
@@ -4290,34 +4345,25 @@ void ASGCamera::SkyTraceCameraWork(APlayerController* Controller, ASGPlayerChara
 	
 	if(LeftUnSafe || RightUnSafe)
 	{
-		FRotator CameraRotation = SkyTraceCamera->GetCamera()->GetComponentRotation();
+		FRotator PrevRotator = SkyTraceCamera->GetCamera()->GetComponentRotation();
+		FRotator TargetRotator = PrevRotator;
+		
 		float RotationSpeed = 1; // 카메라 회전 속도 조절
 		
 		if (LeftUnSafe) {
 			FVector2D TargetScreenPosition = FVector2D(ViewportSize.X * (1 - TargetHorizontalSafeAreaRatio), BallScreenPosition.Y);
 			FVector2D Delta = TargetScreenPosition - BallScreenPosition;
-
-			// SG_LOG(Log, "Test 001 Delta 1111 %s", *Delta.ToString());
-
-			if (Delta.Size() > KINDA_SMALL_NUMBER)
-			{
-				CameraRotation.Yaw -= Delta.X * RotationSpeed * DeltaTime;
-			}
+			TargetRotator.Yaw -= Delta.X * RotationSpeed * DeltaTime;
 		}
 		else
 		{
 			FVector2D TargetScreenPosition = FVector2D(ViewportSize.X * TargetHorizontalSafeAreaRatio, BallScreenPosition.Y);
 			FVector2D Delta = TargetScreenPosition - BallScreenPosition;
-
-			// SG_LOG(Log, "Test 001 Delta 2222 %s", *Delta.ToString());
-
-			if (Delta.Size() > KINDA_SMALL_NUMBER)
-			{
-				CameraRotation.Yaw -= Delta.X * RotationSpeed * DeltaTime;
-			}
+			TargetRotator.Yaw -= Delta.X * RotationSpeed * DeltaTime;
 		}
-		
-		SkyTraceCamera->GetCamera()->SetWorldRotation(CameraRotation);
+
+		FRotator TargetLerpedRot = FMath::Lerp(PrevRotator, TargetRotator, 0.5f);
+		SkyTraceCamera->GetCamera()->SetWorldRotation(TargetLerpedRot);
 	}
 }
 

@@ -118,6 +118,7 @@ void ASGGrid::ShowGrid()
 	ASGCourseMode* const CourseMode = GetWorld()->GetAuthGameMode<ASGCourseMode>();
 	IS_VALID_RETURN(CourseMode);
 	AActor* const HoleCup = CourseMode->GetHoleCup(ScoreManager->GetHoleNum());
+
 	IS_VALID_RETURN(HoleCup);
 	APlayerController* Controller = Cast<APlayerController>(GameInst->GetFirstLocalPlayerController());
 	IS_VALID_RETURN(Controller);
@@ -149,7 +150,7 @@ void ASGGrid::ShowGrid()
 		return;
 	}
 
-	HoleLoc = HoleCup->GetActorLocation();
+	HoleLoc = CourseMode->GetHoleCupLocation(HoleCup);
 
 	// 그리드 업데이트
 	const float GridThickness = DataCenter->GetGridThicknessValue();
