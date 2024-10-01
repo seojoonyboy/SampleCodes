@@ -1,12 +1,17 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using System.Text;
 using UnityEngine;
-
-using Artistar.Puzzle.Core;
-using UnityEditor;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+
+using Artistar.Puzzle.Core;
+using Snowballs.Client.Etc;
+using Snowballs.Client.View;
+using Unity.VisualScripting;
+using Cysharp.Threading.Tasks;
 
 public class BlockController : BaseController
 {
@@ -16,7 +21,7 @@ public class BlockController : BaseController
 
         Idle,
         Gravity,
-
+        
         RightLookup,
         LeftLookup,
         TopLookup,
@@ -26,6 +31,10 @@ public class BlockController : BaseController
 
     private Block block = null;
     private GameObject blockObject = null;
+    public GameObject BlockObject => this.blockObject;
+
+    private GameObject normalBlockObject;
+    public GameObject NormalBlockObject => this.normalBlockObject;
 
     [HideInInspector]
     public static int gravityCount = 0;
@@ -44,33 +53,73 @@ public class BlockController : BaseController
     private bool prevIsCleared = false;
 
     [HideInInspector]
-    public Coroutine coGravity = null;
+    public UniTask? coGravity = null;
 
     private static System.Random Random = new System.Random();
 
     public static BlockController Create(Block block, int row, int col, bool isGenesis = false, Action onFinishedCallback = null)
     {
-        GameObject prefab =
-            block.type == BlockType.CardSkill ?
-            Resources.Load<GameObject>("Prefabs/cardSkillPrefab")
-            :
-            Resources.Load<GameObject>("Prefabs/blockPrefab");
-
-        // 프리팹으로 부터 생성하고
-        GameObject prefabObject = Instantiate(prefab, BaseController.stageObject.transform);
+        //TODO 에이티즈 분기 작업
+        GameObject prefabObject = IngameBlockPoolController.SpawnBlock();
         prefabObject.name = "B-" + block.ToString();
+        SBDebug.Log("SJW : " + prefabObject.name);
+        
         // 블록콘트롤러 설정
         BlockController self = prefabObject.GetComponent<BlockController>();
         self.blockObject = prefabObject.transform.Find("Block").gameObject;
+        block.state = BlockState.Fixed;
         self.block = block;
+        
+        prefabObject.transform.SetParent(stageController.transform);
+        
         SpriteRenderer sr = self.blockObject.GetComponent<SpriteRenderer>();
         sr.sprite = Resources.Load("Blocks/110/" + GetSpriteName(block), typeof(Sprite)) as Sprite;
+        sr.enabled = true;
+        
+        NormalBlockController normalSelf = null;
+        
+        switch (CommonProcessController.GetNameString())
+        {
+            case CommonProcessController.KWONEUNBIINFO:
+            case CommonProcessController.IKONINFO:    
+                if (block.IsNormal)
+                {
+                    // 스태틱이라 함수 처리 x
+                    // 노멀블록 프리팹 경로
+                    StringBuilder blockAddress = new StringBuilder();
+                    blockAddress.Append("GUI/Fx/Prefabs/Block/Normal/");
+                    blockAddress.Append(GetSpriteName(block));
+                    blockAddress.Append("/Block_");
+                    blockAddress.Append(GetSpriteName(block));
+                    
+                    // 기존 프리팹 Block 밑에 추가로 생성
+                    GameObject blockObj = (GameObject)Resources.Load(blockAddress.ToString());
+                    var animBlock = Instantiate(blockObj, prefabObject.transform);
+                    
+                    self.normalBlockObject = prefabObject.transform.GetChild(1).gameObject;
+                    normalSelf = self.normalBlockObject.GetComponent<NormalBlockController>();
 
+                    if (block.isFirstBlock)
+                    {
+                        normalSelf.WaitRandomTime();
+                    }
+                }
+
+                // 이미지로 처리한 블록들 안보이게 처리
+                if (block.IsSpecial || block.IsNormal)
+                    sr.enabled = false;
+                break;
+            // 김강장
+            default: 
+                break;
+        }
+        
         if (block.type == BlockType.CardSkill)
         {
             GameObject skillBlock = Resources.Load("Blocks/CardSkill/SkillBlock") as GameObject;
             GameObject skillBlockObj = Instantiate(skillBlock, self.blockObject.transform);
-
+            skillBlockObj.name = "SkillBlock";
+            
             Scene scene = SceneManager.GetActiveScene();
             if (scene.name.Contains("Test"))
             {
@@ -84,24 +133,33 @@ public class BlockController : BaseController
                 float width = skillBlockTexture.width;
                 float height = skillBlockTexture.height;
 
-                SpriteRenderer skillBlockBackSr = skillBlockObj.transform.Find("Back").GetComponent<SpriteRenderer>();
+                SpriteRenderer skillBlockBackSr = skillBlockObj.transform.Find("Animation_Controller/Back").GetComponent<SpriteRenderer>();
                 skillBlockBackSr.sprite = Sprite.Create(skillBlockTexture, new Rect(0.0f, 0.0f, width, height), new Vector2(0.5f, 0.5f));
                 skillBlockBackSr.transform.localScale = new Vector3(100.0f / width, 100.0f / height, 1.0f);
             }
-
+            
+            
         }
-
+        
+        //특수블록인 경우
         if ((int)block.type / 100 == 5) {
-            sr.enabled = false;
+            sr.enabled = false;  
         }
 
         self.transform.localPosition = self.GetLocalPosition(row, col);
 
         // 제네시스 블럭에서 생성된 경우 처음 시작은 투명하게
         if (isGenesis) {
-            Color color = sr.color;
-            color.a = 0f;
-            sr.color = color;
+            switch (CommonProcessController.GetNameString())
+            {
+                case CommonProcessController.KWONEUNBIINFO:
+                case CommonProcessController.IKONINFO:    
+                    FadeNormalBlock(normalSelf, 0.0f, false);
+                    break;
+                default:
+                    FadeNormalBlockAteez(sr);
+                    break;
+            }
         }
         // Order In Layer 값 변경
         if (block.IsNormal || block.IsMission)
@@ -128,76 +186,160 @@ public class BlockController : BaseController
         GameObject prefabCreation = null;
         switch (block.type) {
             case BlockType.Rocket:
-                // Debug.Log("Create Fx_Create_Missile_01");
-                prefabCreation = IngameFxResource.Instance
-                    .GetPrefab(IngameFxResource.PrefabType.CreateMissile);
-                GameObject crossObj = CreateEffect(prefabCreation);
-                crossObj.transform.localScale = new Vector3(0.01f, 0.01f, 1);
-                float crossObjClipLength = crossObj.GetComponent<Animation>().clip.length;
-                CoroutineTaskManager.AddTask(WaitForSec(crossObjClipLength, () =>
+                prefabCreation = IngameEffectPrefabLoader.Instance
+                    .GetBlockCreatePrefab(block.type);
+                switch (CommonProcessController.GetNameString())
                 {
-                    onFinishedCallback?.Invoke();
-                    //crossObj.AddComponent<SelfDestroy>();
-                }));
+                    case CommonProcessController.KWONEUNBIINFO:
+                    case CommonProcessController.IKONINFO:    
+                        if (SceneController.currentSceneSceneId == SceneController.Scene.InGame 
+                            && !PopupRoot.Instance.IsPopupExist())
+                        {
+                            CommonProcessController.PlayEffectSound("Ingame", 6);
+                            CommonProcessController.MuteEffectSound("Ingame", 0);
+                        }
+
+                        CreateEffect(prefabCreation);
+                        WaitForSec(0.5f, () =>
+                        {
+                            onFinishedCallback?.Invoke();
+                        });
+                        break;
+                    default:
+                        GameObject crossObj = CreateEffectAteez(prefabCreation);
+                        SetSpecialAteez(block.type, crossObj, onFinishedCallback);
+                        break;
+                }
                 break;
             case BlockType.PaperPlane:
-                // Debug.Log("Create Fx_Create_Airplane_01");
-                prefabCreation = IngameFxResource.Instance
-                    .GetPrefab(IngameFxResource.PrefabType.CreateAirplane);
-                GameObject airplaneObj = CreateEffect(prefabCreation);
+                if (SceneController.currentSceneSceneId == SceneController.Scene.InGame 
+                    && !PopupRoot.Instance.IsPopupExist())
+                {
+                    CommonProcessController.MuteEffectSound("Ingame", 0);
+                    CommonProcessController.PlayEffectSound("Ingame", 8);
+                }
+
+                prefabCreation = IngameEffectPrefabLoader.Instance
+                    .GetBlockCreatePrefab(block.type);
+                GameObject airplaneObj = null;
+                switch (CommonProcessController.GetNameString())
+                {
+                    case CommonProcessController.KWONEUNBIINFO:
+                    case CommonProcessController.IKONINFO:
+                        airplaneObj = CreateEffect(prefabCreation);
+                        break;
+                    default:
+                        airplaneObj = CreateEffectAteez(prefabCreation);
+                        break;
+                }
+                
                 AirplaneBlockEffect effectView = airplaneObj.GetComponent<AirplaneBlockEffect>();
                 effectView.OnCreate(() =>
                 {
                     onFinishedCallback?.Invoke();
-                    if(airplaneObj != null) airplaneObj.AddComponent<SelfDestroy>();
                 });
                 break;
             case BlockType.Mirrorball:
-                // Debug.Log("Create Fx_Create_MirrorBall_01");
-                prefabCreation = IngameFxResource.Instance
-                    .GetPrefab(IngameFxResource.PrefabType.CreateMirrorBall);
-                GameObject mirrorBallObj = CreateEffect(prefabCreation);
-                float mirrorBallClipLength = mirrorBallObj.GetComponent<Animation>().clip.length;
-                CoroutineTaskManager.AddTask(WaitForSec(mirrorBallClipLength, () =>
+                if (SceneController.currentSceneSceneId == SceneController.Scene.InGame
+                    && !PopupRoot.Instance.IsPopupExist())
                 {
-                    onFinishedCallback?.Invoke();
-                    if(mirrorBallObj != null) mirrorBallObj.AddComponent<SelfDestroy>();
-                }));
+                    CommonProcessController.MuteEffectSound("Ingame", 0);
+                    CommonProcessController.PlayEffectSound("Ingame", 12);
+                }
+
+                prefabCreation = IngameEffectPrefabLoader.Instance
+                    .GetBlockCreatePrefab(block.type);
+                switch (CommonProcessController.GetNameString())
+                {
+                    case CommonProcessController.KWONEUNBIINFO:
+                    case CommonProcessController.IKONINFO:
+                        CreateEffect(prefabCreation);
+                        WaitForSec(0.5f, () =>
+                        {
+                            onFinishedCallback?.Invoke();
+                        });
+                        break;
+                    default:
+                        GameObject mirrorBallAteezObj = CreateEffectAteez(prefabCreation);
+                        SetSpecialAteez(block.type,mirrorBallAteezObj, onFinishedCallback);
+                        break;
+                }
                 break;
             case BlockType.Bomb:
                 // Debug.Log("Create Fx_Create_Bomb_01");
-                prefabCreation = IngameFxResource.Instance
-                    .GetPrefab(IngameFxResource.PrefabType.CreateBomb);
-                GameObject bombObj = CreateEffect(prefabCreation);
-                float bombObjClipLength = bombObj.GetComponent<Animation>().clip.length;
-                CoroutineTaskManager.AddTask(WaitForSec(bombObjClipLength, () =>
+                prefabCreation = IngameEffectPrefabLoader.Instance
+                    .GetBlockCreatePrefab(block.type);
+
+                switch (CommonProcessController.GetNameString())
                 {
-                    onFinishedCallback?.Invoke();
-                    // bombObj.AddComponent<SelfDestroy>();
-                }));
+                    case CommonProcessController.KWONEUNBIINFO:
+                    case CommonProcessController.IKONINFO:    
+                        if (SceneController.currentSceneSceneId == SceneController.Scene.InGame && 
+                            !PopupRoot.Instance.IsPopupExist())
+                        {
+                            CommonProcessController.MuteEffectSound("Ingame", 0);
+                            CommonProcessController.PlayEffectSound("Ingame", 3);
+                        }
+
+                        CreateEffect(prefabCreation);
+                        WaitForSec(0.5f, () =>
+                        {
+                            onFinishedCallback?.Invoke();
+                        });
+                        break;
+                    default:
+                        GameObject bombObj = CreateEffectAteez(prefabCreation);
+                        SetSpecialAteez(block.type,bombObj, onFinishedCallback);
+                        break;
+                }
                 break;
             case BlockType.ShootingStar:
+                CommonProcessController.MuteEffectSound("Ingame", 0);
+                CommonProcessController.PlayEffectSound("Ingame", 16);
+                
                 // Debug.Log("Create Fx_Create_StarRay_01");
-                prefabCreation = IngameFxResource.Instance
-                    .GetPrefab(IngameFxResource.PrefabType.CreateStarRays);
-                GameObject finaleObj = CreateEffect(prefabCreation);
-                float finaleClipLength = finaleObj.GetComponent<Animation>().clip.length;
-                CoroutineTaskManager.AddTask(WaitForSec(finaleClipLength, () =>
+                prefabCreation = IngameEffectPrefabLoader.Instance
+                    .GetBlockCreatePrefab(block.type);
+                switch (CommonProcessController.GetNameString())
                 {
-                    onFinishedCallback?.Invoke();
-                    if(finaleObj != null) finaleObj.AddComponent<SelfDestroy>();
-                }));
+                    case CommonProcessController.KWONEUNBIINFO:
+                    case CommonProcessController.IKONINFO:    
+                        CreateEffect(prefabCreation);
+                        WaitForSec(0.5f, () =>
+                        {
+                            onFinishedCallback?.Invoke();
+                        });
+                        break;
+                    default:
+                        GameObject finaleObj = CreateEffect(prefabCreation);
+                        finaleObj = CreateEffectAteez(prefabCreation);
+                        SetSpecialAteez(block.type,finaleObj, onFinishedCallback);
+                        break;
+                }
                 break;
         }
+
+        BlockLog.Instance.CreateBlock(block);
         return self;
 
-        IEnumerator WaitForSec(float waitTime, Action cb)
+        async UniTask WaitForSec(float waitTime, Action cb)
         {
-            yield return new WaitForSeconds(waitTime);
+            await UniTask.Delay(TimeSpan.FromSeconds(waitTime));
             cb?.Invoke();
         }
 
         GameObject CreateEffect(GameObject prefabOrigin)
+        {
+            GameObject prefabObjectCreation = Instantiate(prefabOrigin, self.blockObject.transform);
+            Canvas canvas = prefabObjectCreation.GetComponent<Canvas>();
+            canvas.overrideSorting = true;
+            // Default로 통일
+            canvas.sortingLayerName = "Default";
+
+            return prefabObjectCreation;
+        }
+        
+        GameObject CreateEffectAteez(GameObject prefabOrigin)
         {
             GameObject prefabObjectCreation = Instantiate(prefabOrigin, self.blockObject.transform);
             Canvas canvas = prefabObjectCreation.AddComponent<Canvas>();
@@ -229,24 +371,36 @@ public class BlockController : BaseController
 
     public static void AddCombineEffect(BlockType blockType1, BlockType blockType2, Transform parent)
     {
-        GameObject combineEffectPrefab = IngameFxResource.Instance
-            .GetPrefab(IngameFxResource.PrefabType.BlockCombine);
+        GameObject combineEffectPrefab = IngameEffectPrefabLoader.Instance
+            .GetBlockCombinePrefab();
         GameObject combineObj = Instantiate(combineEffectPrefab, parent);
         combineObj.transform.localPosition = Vector3.zero;
         SelfDestroy selfDestroy = combineObj.AddComponent<SelfDestroy>();
         selfDestroy.interval = 3.0f;
-
+        
         var targetSprite1 = Resources.Load("Blocks/110/" + (int)blockType1, typeof(Sprite)) as Sprite;
         var targetSprite2 = Resources.Load("Blocks/110/" + (int)blockType2, typeof(Sprite)) as Sprite;
-        combineObj.transform.Find("Block_01").GetComponent<Image>().sprite = targetSprite1;
-        combineObj.transform.Find("Block_02").GetComponent<Image>().sprite = targetSprite2;
+        
+        switch (CommonProcessController.GetNameString())
+        {
+            case CommonProcessController.KWONEUNBIINFO:
+            case CommonProcessController.IKONINFO:    
+                combineObj.transform.Find("Block_01").GetComponent<SpriteRenderer>().sprite = targetSprite1;
+                combineObj.transform.Find("Block_02").GetComponent<SpriteRenderer>().sprite = targetSprite2;
+                break;
+            // 에이티즈
+            default:
+                combineObj.transform.Find("Block_01").GetComponent<Image>().sprite = targetSprite1;
+                combineObj.transform.Find("Block_02").GetComponent<Image>().sprite = targetSprite2;
+                break;
+        }
     }
 
     private void Start()
     {
         // 아이들 모션 시작
-        if (null != this.block &&
-            (this.block.IsNormal || this.block.IsSpecial) &&
+        if (null != this.block && 
+            (this.block.IsNormal || this.block.IsSpecial) && 
             BlockAttr.Movable == this.block.attr)
         {
             this.state = State.Idle;
@@ -262,7 +416,7 @@ public class BlockController : BaseController
         // UnityEngine.UI.Text txt = this.transform.Find("DEBUG").Find("LOG").gameObject.GetComponent<UnityEngine.UI.Text>();
         // if (null != c.block)
         //     txt.text = ((int)(this.block.type)).ToString() + " " + ((int)(c.block.type)).ToString();
-        // else
+        // else 
         //     txt.text = ((int)(this.block.type)).ToString();
 
         // TODO: 미션블럭 등은 HP의 값에 따라 다른 스프라이트를 가지게 되므로 HP값에 따른 스프라이트를 Update에서 교체처리하도록 한다.
@@ -289,7 +443,7 @@ public class BlockController : BaseController
                     if (this.prevState != this.state) {
                         this.prevState = this.state;
                         if (State.Idle == this.state)
-                            StartCoroutine(this.Idle());
+                            this.Idle().Forget();
                     }
                     break;
                 case BlockType.Luckyball:
@@ -316,7 +470,7 @@ public class BlockController : BaseController
                         sr.sprite = Resources.Load("Blocks/110/" + GetSpriteName(this.block), typeof(Sprite)) as Sprite;
                         this.prevNormalSidePoint = block.normalSidePoint;
                         Play(
-                            IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.NormalExplosion),
+                            IngameEffectPrefabLoader.Instance.GetBlockExplosionPrefab(block.type),
                             this.transform.localPosition);
                     }
                     break;
@@ -330,7 +484,7 @@ public class BlockController : BaseController
                         sr.sprite = Resources.Load("Blocks/110/" + GetSpriteName(this.block), typeof(Sprite)) as Sprite;
                         this.prevNormalSidePoint = block.pieces.Count;
                         Play(
-                            IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.NormalExplosion),
+                            IngameEffectPrefabLoader.Instance.GetBlockExplosionPrefab(block.type),
                             this.transform.localPosition);
                     }
                     break;
@@ -395,8 +549,8 @@ public class BlockController : BaseController
                             case BlockType.Purple: p = 1; break;
                         }
                     }
-                    return ((int)block.type).ToString() + "-" +
-                        r.ToString() +
+                    return ((int)block.type).ToString() + "-" + 
+                        r.ToString() + 
                         y.ToString() +
                         g.ToString() +
                         p.ToString();
@@ -419,17 +573,19 @@ public class BlockController : BaseController
                     return ((int)block.type).ToString() + "-1";
                 else
                     return ((int)block.type).ToString() + "-2";
-            default:
+            default: 
                 return ((int)block.type).ToString();
         }
     }
 
-    private IEnumerator Idle()
+    private async UniTask Idle()
     {
         // 랜덤으로 기다린다.
-        yield return new WaitForSeconds((float)BlockController.Random.Next(0, 200) / 100f);
+        await UniTask.Delay(TimeSpan.FromSeconds(BlockController.Random.Next(0, 200) / 100f));
+        //yield return new WaitForSeconds((float)BlockController.Random.Next(0, 200) / 100f);
         if (this.IsDestroyed() || State.Idle != this.state)
-            yield break;
+            throw new OperationCanceledException();
+            //yield break;
         Transform t = this.blockObject.transform;
         float tick = 0;
         for (;;) {
@@ -442,15 +598,19 @@ public class BlockController : BaseController
                 t.localPosition = new Vector3(0, upfloating, 0);
                 t.localScale = new Vector3(scale, scale, 1);
                 if (this.IsDestroyed() || State.Idle != this.state)
-                    yield break;
+                    throw new OperationCanceledException();
+                    //yield break;
             }
-            yield return null;
+
+            await UniTask.NextFrame();
+            //yield return null;
             if (this.IsDestroyed() || State.Idle != this.state)
-                yield break;
+                throw new OperationCanceledException();
+                //yield break;
         }
     }
 
-    public IEnumerator Gravity(List<Toss> tosses)
+    public async UniTask Gravity(List<Toss> tosses)
     {
         this.isGraviting = true;
         BlockController.gravityCount++;
@@ -458,10 +618,13 @@ public class BlockController : BaseController
         try {
             const float durationToss = 0.135f;
             if (0 < tosses.Count)
-                yield return new WaitForSeconds(tosses[0].no*durationToss);
+                await UniTask.Delay(TimeSpan.FromSeconds(tosses[0].no * durationToss));
+                //yield return new WaitForSeconds(tosses[0].no*durationToss);
             if (this.IsDestroyed())
-                yield break;
+                throw new OperationCanceledException();
+                //yield break;
             SpriteRenderer sr = null;
+            NormalBlockController nc = null;
             Toss toss = null;
             Vector3 from = new Vector3(0,0,0);
             Vector3 to = new Vector3(0,0,0);
@@ -473,7 +636,7 @@ public class BlockController : BaseController
                 :
                 GetPositionByMatrix(tosses[0].fromRow, tosses[0].fromCol).x;
             float endX = GetPositionByMatrix(tosses[tosses.Count-1].toRow, tosses[tosses.Count-1].toCol).x;
-
+            
             while (tick < endTick) {
 
                 // 이징 곡선을 적용하여 현재 위치를 얻는다.
@@ -486,8 +649,9 @@ public class BlockController : BaseController
                     toss = tosses[n];
                     // 워프인이라면 삭제 한다.
                     if (TossType.WrapIn == toss.type) {
-                        StartCoroutine(this.FadeoutTo(toss.toRow, toss.toCol, durationToss));
-                        yield return null;
+                        this.FadeoutTo(toss.toRow, toss.toCol, durationToss).Forget();
+                        await UniTask.NextFrame();
+                        //yield return null;
                     }
                     if (null != toss.from) {
                         from = GetPositionByMatrix(toss.fromRow, toss.fromCol);
@@ -495,6 +659,10 @@ public class BlockController : BaseController
                     } else {
                         from = GetPositionByMatrix(toss.toRow - 1, toss.toCol);
                         sr = this.blockObject.GetComponent<SpriteRenderer>();
+                        if (this.normalBlockObject != null)
+                        {
+                            nc = this.normalBlockObject.GetComponent<NormalBlockController>();
+                        }
                     }
                     to = GetPositionByMatrix(toss.toRow, toss.toCol);
                 }
@@ -512,27 +680,32 @@ public class BlockController : BaseController
                             this.transform.rotation = Quaternion.Euler(0f, 0f, this.Linear(0f, -angle, (x-startX)/gap));
                         else if (startX + gap < x && x <= endX - gap)
                             this.transform.rotation = Quaternion.Euler(0f, 0f, -angle);
-                        else
+                        else 
                             this.transform.rotation = Quaternion.Euler(0f, 0f, this.Linear(0f, -angle, (endX-x)/gap));
                     } else {
                         if (startX - gap <= x)
                             this.transform.rotation = Quaternion.Euler(0f, 0f, this.Linear(0f, angle, (startX-x)/gap));
                         else if (endX + gap <= x && x < startX - gap)
                             this.transform.rotation = Quaternion.Euler(0f, 0f, angle);
-                        else
+                        else 
                             this.transform.rotation = Quaternion.Euler(0f, 0f, this.Linear(0f, angle, (x-endX)/gap));
                     }
                 }
                 // 투명도
                 if (null != sr) {
-                    Color color = sr.color;
-                    color.a = EasingFunction.Linear(0f, 1f, tick/durationToss);
-                    sr.color = color;
+                    switch (CommonProcessController.GetNameString())
+                    {
+                        case CommonProcessController.KWONEUNBIINFO:
+                        case CommonProcessController.IKONINFO: 
+                            FadeNormalBlock(nc, EasingFunction.Linear(0f, 1f, tick/durationToss), true);
+                            break;
+                        default:
+                            FadeNormalBlockAteez(sr);
+                            break;
+                    }
                 }
                 tick += Time.deltaTime;
-                yield return null;
-                if (this.IsDestroyed())
-                    yield break;
+                await UniTask.NextFrame();
             }
             // 최종값을 한 번 더 넣어서 스키핑에 의한 부정확을 맞춘다.
             // 최종위치값으로 넣어준다.
@@ -540,9 +713,16 @@ public class BlockController : BaseController
             to = GetPositionByMatrix(toss.toRow, toss.toCol);
             this.transform.localPosition = to;
             if (sr) {
-                Color color = sr.color;
-                color.a = 1f;
-                sr.color = color;
+                switch (CommonProcessController.GetNameString())
+                {
+                    case CommonProcessController.KWONEUNBIINFO:
+                    case CommonProcessController.IKONINFO:
+                        FadeNormalBlock(nc, 1f, true);
+                        break;
+                    default:
+                        FadeNormalBlockAteez(sr);
+                        break;
+                }
             }
             // 미세 기울어짐 보정
             this.transform.rotation = Quaternion.Euler(0,0,0);
@@ -554,9 +734,43 @@ public class BlockController : BaseController
         }
     }
 
+    private static void FadeNormalBlockAteez(SpriteRenderer sr)
+    {
+        Color color = sr.color;
+        color.a = 1f;
+        sr.color = color;
+    }
+    private static void FadeNormalBlock(NormalBlockController nc ,float alpha ,bool check)
+    {
+        if (nc != null)
+        {
+            // 기존 a값 변경
+            foreach (var t in nc.Obj)
+            {
+                Color normalColor = t.color;
+                normalColor.a = alpha;
+                t.color = normalColor;
+            }
+            // 기존 노멀블록은 sprite 한개만 관리하지만
+            if (nc.Animators != null)
+            {
+                if (alpha.Equals(1.0f))
+                {
+                    nc.Animators.enabled = check;
+                }
+            }
+
+            foreach (var effect in nc.Effects)
+            {
+                if(alpha.Equals(1.0f))
+                    effect.SetActive(check);
+            }
+        }
+    }
+
     // 블럭을 특정 위치로 이동 후 제거
     // 일반매칭으로 제거되는 블럭 효과
-    public IEnumerator RemoveTo(int toRow, int toCol, float duration)
+    public async UniTask RemoveTo(int toRow, int toCol, float duration)
     {
         BlockState prevState = this.block.state;
         this.block.state = BlockState.Floating;
@@ -573,24 +787,21 @@ public class BlockController : BaseController
                         from.z
                     );
                 tick += Time.deltaTime;
-                yield return null;
-                if (this.IsDestroyed())
-                    yield break;
+                await UniTask.NextFrame();
             }
             this.transform.localPosition = to;
-            yield return null;
+            await UniTask.NextFrame();
 
         } finally {
-            this.block.state = prevState;
-            // this.stage.RemoveBlock(me);
-            if (!this.IsDestroyed())
-                Destroy(this.gameObject);
+            this.block.state = BlockState.Fixed;
+            IngameBlockPoolController.CheckFirstBlock(this.block);
+            IngameBlockPoolController.ReleaseNormalBlock(this.gameObject);
         }
     }
 
     // 블럭을 특정 위치로 이동 후 제거
     // 일반매칭으로 제거되는 블럭 효과
-    public IEnumerator FadeoutTo(int toRow, int toCol, float duration)
+    public async UniTask FadeoutTo(int toRow, int toCol, float duration)
     {
         BlockState prevState = this.block.state;
         this.block.state = BlockState.Floating;
@@ -614,85 +825,85 @@ public class BlockController : BaseController
                     sr.color = color;
                 }
                 tick += Time.deltaTime;
-                yield return null;
-                if (this.IsDestroyed())
-                    yield break;
+                await UniTask.NextFrame();
             }
             this.transform.localPosition = to;
-            yield return null;
+            await UniTask.NextFrame();
+            //yield return null;
 
         } finally {
-            this.block.state = prevState;
-            // this.stage.RemoveBlock(me);
-            if (!this.IsDestroyed())
-                Destroy(this.gameObject);
+            switch (CommonProcessController.GetNameString())
+            {
+                case CommonProcessController.KWONEUNBIINFO:
+                case CommonProcessController.IKONINFO: 
+                    
+                    break;
+                default:
+                    break;
+            }
+            this.block.state = BlockState.None;
+            IngameBlockPoolController.CheckFirstBlock(this.block);
+            IngameBlockPoolController.ReleaseNormalBlock(this.gameObject);
         }
     }
-    
-    public IEnumerator Explode(float duration = 0f)
+
+    public async UniTask Explode(float duration = 0f)
     {
         BlockState prevState = this.block.state;
         this.block.state = BlockState.Floating;
-        try {
-            if(this == null) yield break;
-
+        try
+        {
+            if (this == null) throw new OperationCanceledException();
+            
             // 이름을 미리 바꿔서 삭제 대기중으로 한다 -> 검색이 안되도록 하는 이유
             this.gameObject.name = "Removing_" + this.gameObject.name;
+            
             switch (this.block.type) {
                 case BlockType.Red:
-                    Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.Explosion_Noraml_Block_Red),
-                        this.transform.localPosition);
-                    break;
                 case BlockType.Blue:
-                    Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.Explosion_Normal_Block_Blue),
-                        this.transform.localPosition);
-                    break;
                 case BlockType.Green:
-                    Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.Explosion_Normal_Block_Green),
-                        this.transform.localPosition);
-                    break;
                 case BlockType.Yellow:
-                    Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.Explosion_Normal_Block_Yellow),
-                        this.transform.localPosition);
-                    break;
                 case BlockType.Purple:
-                    Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.Explosion_Normal_Block_Purple),
-                        this.transform.localPosition);
-                    break;
                 case BlockType.Pink:
-                    Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.Explosion_Normal_Block_Pink),
-                        this.transform.localPosition);
-                    break;
                 case BlockType.Brown:
-                    Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.Explosion_Normal_Block_Brown),
-                        this.transform.localPosition);
+                    CommonProcessController.PlayEffectSound("Ingame", 0, 0.7f);
+                    
+                    var normalPrefab = IngameEffectPrefabLoader.Instance.GetBlockExplosionPrefab(block.type);
+                    Play(
+                        normalPrefab,
+                        this.transform.localPosition
+                    );
+                    
                     break;
+                
+                case BlockType.Bomb:
                 case BlockType.Rocket:
-                    var crossObj = Play(IngameFxResource.Instance.GetPrefab(
-                        IngameFxResource.PrefabType.RocketExplosion),
-                        this.transform.localPosition,
-                        false);
-                    float crossObjClipLength = crossObj.transform.Find("Fx_Holder").GetComponent<Animation>().clip.length;
-                    CoroutineTaskManager.AddTask(WaitForSec(crossObjClipLength, () => { Destroy(crossObj); }));
-                    break;
                 case BlockType.PaperPlane:
-                    break;
                 case BlockType.Mirrorball:
+                case BlockType.ShootingStar:
+                case BlockType.CardSkill:
+                    if (stageController.shootingStarState == StageController.ShootingState.Play)
+                    {
+                        ShootingStarFromSpecialBlockEffect();
+                    }
                     break;
+                    
                 case BlockType.BombBomb:
+                    CommonProcessController.MuteEffectSound("Ingame", 0);
+                    CommonProcessController.PlayEffectSound("Ingame", 5);
+                    
                     var bombBombObj = Play(
-                        IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.BombLargeExplosion),
+                        IngameEffectPrefabLoader.Instance.GetBlockExplosionPrefab(block.type),
                         this.transform.localPosition,
                         false);
                     break;
                 case BlockType.Woodbox:
+                    GameObject woodPrefab = IngameEffectPrefabLoader.Instance
+                        .GetBlockExplosionPrefab(block.type);
+                    GameObject instantiatedWoodPrefab = Instantiate(woodPrefab);
+                    instantiatedWoodPrefab.transform.position = transform.position;
+                    instantiatedWoodPrefab.transform.localScale = Vector3.one;
+                    break;
                 case BlockType.IceCube:
                 case BlockType.TopiarySpring:
                 case BlockType.TopiaryWinter:
@@ -704,8 +915,8 @@ public class BlockController : BaseController
                 case BlockType.Fishbowl:
                 case BlockType.Stand:
                     //터지는 효과
-                    GameObject explodePrefab =
-                        IngameFxResource.Instance.GetPrefab(this.block.type);
+                    GameObject explodePrefab = IngameEffectPrefabLoader.Instance
+                        .GetBlockExplosionPrefab(block.type);
                     GameObject explodeObj = Instantiate(explodePrefab);
                     explodeObj.transform.position = transform.position;
                     break;
@@ -713,63 +924,129 @@ public class BlockController : BaseController
                 case BlockType.Fridge:
                     break;
             }
-            yield return new WaitForSeconds(duration);
+
+            await UniTask.Delay(TimeSpan.FromSeconds(duration));
         } finally {
             this.block.state = prevState;
-            if (!this.IsDestroyed())
-                Destroy(this.gameObject);
+            IngameBlockPoolController.CheckFirstBlock(this.block);
+            
+            if(this.gameObject != null) IngameBlockPoolController.ReleaseNormalBlock(this.gameObject);
         }
     }
 
-    public static IEnumerator WaitForSec(float waitTime, Action cb)
+    public static async UniTask WaitForSec(float waitTime, Action cb)
     {
-        yield return new WaitForSeconds(waitTime);
+        await UniTask.Delay(TimeSpan.FromSeconds(waitTime));
         cb?.Invoke();
     }
 
     // 십자폭탄 효과를 넣어주고
-    public static void CrossEffect(Cell cell) {
+    public static void CrossEffect(Cell cell, BlockController mirrorRocket=null) {
+        var pos = GetPositionByMatrix(cell.row, cell.col);
+        if (mirrorRocket != null)
+        {
+            pos = mirrorRocket.transform.position;
+        }
+
         var crossObj = BlockController.Play(
-            IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.RocketExplosion),
-            GetPositionByMatrix(cell.row, cell.col),
+            IngameEffectPrefabLoader.Instance.GetBlockExplosionPrefab(BlockType.Rocket), 
+            pos,
             false);
         float crossObjClipLength = crossObj.transform.Find("Fx_Holder").GetComponent<Animation>().clip.length;
-        CoroutineTaskManager.AddTask(BlockController.WaitForSec(crossObjClipLength, () => { Destroy(crossObj); }));
+        WaitForSec(crossObjClipLength, () => { Destroy(crossObj); }).Forget();
     }
-
-    public static void BombEffect(Cell cell)
+    
+    public static void BombEffect(Cell cell, BlockController mirrorBomb=null)
     {
+        CommonProcessController.MuteEffectSound("Ingame", 0);
+        CommonProcessController.PlayEffectSound("Ingame", 4);
+        
+        var pos = GetPositionByMatrix(cell.row, cell.col);
+        if (mirrorBomb != null)
+        {
+            pos = mirrorBomb.transform.position;
+        }
+        
         var bombObj = Play(
-            IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.BombSmallExplosion),
-            GetPositionByMatrix(cell.row, cell.col),
+            IngameEffectPrefabLoader.Instance.GetBlockExplosionPrefab(BlockType.Bomb), 
+            pos,
             false);
-        CoroutineTaskManager.AddTask(BlockController.WaitForSec(1.0f, () => { Destroy(bombObj); }));
+        WaitForSec(1.0f, () => { Destroy(bombObj); }).Forget();
     }
 
+    public static GameObject MirrorBallIdleEffect(Cell cell)
+    {
+        CommonProcessController.MuteEffectSound("Ingame", 0);
+        CommonProcessController.PlayEffectSound("Ingame", 13);
+        
+        var idleObj =
+            Play(
+                IngameEffectPrefabLoader.Instance.GetMirrorBallIdlePrefab(),
+                GetPositionByMatrix(cell.row, cell.col),
+                false
+            );
+        
+        return idleObj;
+    }
+    
+    public static GameObject MirrorBallSoulEffect(Cell cell)
+    {
+        var soulObj=
+            Play(
+                IngameEffectPrefabLoader.Instance.GetMirrorBallAbsorptionPrefab(),
+            GetPositionByMatrix(cell.row, cell.col),
+                false
+        );
+        
+        return soulObj;
+    }
+
+    public static void ShootingStarEffect(Cell cell)
+    {
+        var shootingStarObj = 
+            Play(
+            IngameEffectPrefabLoader.Instance.GetBlockExplosionPrefab(BlockType.ShootingStar), 
+            GetPositionByMatrix(cell.row, cell.col),
+            false
+            );
+        shootingStarObj.transform.localScale = new Vector3(1f, 1f, 1f);
+    }
+    
+    public void ShootingStarFromSpecialBlockEffect()
+    {
+        CommonProcessController.PlayEffectSound("Ingame", 0, 0.7f);
+        
+        Play(
+            IngameEffectPrefabLoader.Instance.GetSpecialBlockFromShootingStarPrefab(),
+            this.transform.localPosition
+        );
+    }
+    
     public static GameObject Play(GameObject prefab, Vector3 pos, bool selfDestroy = true)
     {
         GameObject root = GameObject.Find("Stage");
         GameObject prefabObject = Instantiate(prefab, root.transform);
-        if (selfDestroy)
-            prefabObject.AddComponent<SelfDestroy>();
+        if (selfDestroy) prefabObject.AddComponent<SelfDestroy>();
         prefabObject.transform.localPosition = pos;
         return prefabObject;
     }
 
-    public IEnumerator Touch()
+    
+    public async UniTask Touch() 
     {
         if (null != BaseController.stageObject.transform.Find("B" + this.block.ToJObject() + "_touch"))
-            yield break;
+            throw new OperationCanceledException();
+            //yield break;
         float tick = 0;
         GameObject prefab = null;
         switch (this.block.type) {
-            case BlockType.Red: prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.TouchRed); break;
-            case BlockType.Yellow : prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.TouchYellow); break;
-            case BlockType.Blue : prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.TouchBlue); break;
-            case BlockType.Green : prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.TouchGreen); break;
-            case BlockType.Purple : prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.TouchPurple); break;
-            case BlockType.Pink : prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.TouchPink); break;
-            case BlockType.Brown : prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.TouchBrown); break;
+            case BlockType.Red: prefab = IngameEffectPrefabLoader.Instance.GetBlockTouchPrefab(BlockType.Red); break;
+            case BlockType.Yellow : prefab = IngameEffectPrefabLoader.Instance.GetBlockTouchPrefab(BlockType.Yellow); break;
+            case BlockType.Blue : prefab = IngameEffectPrefabLoader.Instance.GetBlockTouchPrefab(BlockType.Blue); break;
+            case BlockType.Green : prefab = IngameEffectPrefabLoader.Instance.GetBlockTouchPrefab(BlockType.Green); break;
+            case BlockType.Purple : prefab =IngameEffectPrefabLoader.Instance.GetBlockTouchPrefab(BlockType.Purple); break;
+            case BlockType.Pink : prefab = IngameEffectPrefabLoader.Instance.GetBlockTouchPrefab(BlockType.Pink); break;
+            case BlockType.Brown : prefab = IngameEffectPrefabLoader.Instance.GetBlockTouchPrefab(BlockType.Brown); break;
         }
         if (null != prefab) {
             GameObject root = BaseController.stageObject;
@@ -777,13 +1054,13 @@ public class BlockController : BaseController
             prefabObject.name = "B" + this.block.ToJObject() + "_touch";
             try {
                 while (tick < 2.0f) {
+                    if (!stageController.isIdling || stageController.isGraviting) { return; }
+                    
                     Vector3 worldPoint = this.blockObject.transform.TransformPoint(this.blockObject.transform.localPosition);
                     Vector3 localPoint = root.transform.InverseTransformPoint(worldPoint);
                     prefabObject.transform.localPosition = localPoint;
                     tick += Time.deltaTime;
-                    yield return null;
-                    if (this.IsDestroyed())
-                        yield break;
+                    await UniTask.NextFrame();
                 }
             } finally {
                 Destroy(prefabObject);
@@ -791,8 +1068,10 @@ public class BlockController : BaseController
         }
     }
 
-    public IEnumerator MoveTo(int row, int col, float duration)
+    public async UniTask MoveTo(int row, int col, float duration,CancellationTokenSource cts)
     {
+        CommonProcessController.PlayEffectSound("Ingame", 2);
+
         this.block.state = BlockState.Floating;
         try {
             float tick = 0;
@@ -805,20 +1084,19 @@ public class BlockController : BaseController
                         from.z
                     );
                 tick += Time.deltaTime;
-                yield return null;
-                if (this.IsDestroyed())
-                    yield break;
+                await UniTask.NextFrame();
             }
             this.transform.localPosition = to;
-            yield return null;
-            if (this.IsDestroyed())
-                yield break;
-        } finally {
+            await UniTask.NextFrame();
+        } finally
+        {
             this.block.state = BlockState.Fixed;
+            await UniTask.Delay(1, cancellationToken: cts.Token);
+            if (cts.IsCancellationRequested) throw new OperationCanceledException();
         }
     }
 
-    public IEnumerator MoveToReturnly(int row, int col, float duration)
+    public async UniTask MoveToReturnly(int row, int col, float duration)
     {
         this.block.state = BlockState.Floating;
         try {
@@ -832,14 +1110,10 @@ public class BlockController : BaseController
                         from.z
                     );
                 tick += Time.deltaTime;
-                yield return null;
-                if (this.IsDestroyed())
-                    yield break;
+                await UniTask.NextFrame();
             }
             this.transform.localPosition = to;
-            yield return null;
-            if (this.IsDestroyed())
-                yield break;
+            await UniTask.NextFrame();
             tick = 0;
             while (tick <= duration) {
                 this.transform.localPosition = new Vector3(
@@ -848,18 +1122,16 @@ public class BlockController : BaseController
                         to.z
                     );
                 tick += Time.deltaTime;
-                yield return null;
-                if (this.IsDestroyed())
-                    yield break;
+                await UniTask.NextFrame();
             }
             this.transform.localPosition = from;
-            yield return null;
+            await UniTask.NextFrame();
         } finally {
             this.block.state = BlockState.Fixed;
         }
     }
 
-    public IEnumerator ThreatedBySideAttack(int row, int col, float duration)
+    public async UniTask ThreatedBySideAttack(int row, int col, float duration)
     {
         float tick = 0;
         Transform t = this.blockObject.transform;
@@ -868,25 +1140,18 @@ public class BlockController : BaseController
             float scale = EasingFunction.EaseOutQuint(1f, 1.2f, tick/duration);
             t.localScale = new Vector3(scale, scale, 1);
             tick += Time.deltaTime;
-            yield return null;
-            if (this.IsDestroyed())
-                yield break;
+            await UniTask.Yield();
         }
         t.localScale = new Vector3(1f, 1.2f, 1f);
-        yield return null;
-        if (this.IsDestroyed())
-            yield break;
+        await UniTask.Yield();
 
         while (tick <= duration) {
             float scale = EasingFunction.EaseInQuint(1.2f, 1f, tick/duration);
             t.localScale = new Vector3(scale, scale, 1);
             tick += Time.deltaTime;
-            yield return null;
-            if (this.IsDestroyed())
-                yield break;
+            await UniTask.Yield();
         }
         t.localScale = new Vector3(1f, 1f, 1f);
-        // yield return null;
     }
 
     // 매칭할 블럭이 없어서 블럭이 교체되었을 경우의 애니메이션
@@ -896,14 +1161,86 @@ public class BlockController : BaseController
         this.block = newBlock;
         this.blockObject.GetComponent<SpriteRenderer>().sprite = Resources.Load("Blocks/110/" + (int)block.type, typeof(Sprite)) as Sprite;
         this.name = "B-" + newBlock.ToString();
+        var prefabObject = this.blockObject.transform.parent;
+
+        switch (CommonProcessController.GetNameString())
+        {
+            case CommonProcessController.KWONEUNBIINFO:
+            case CommonProcessController.IKONINFO:    
+                // 매칭되고 나서 다시 해당하는 프리팹 생성
+                CreateNormalBlockPrefab(prefabObject);
+        
+                IngameBlockPoolController.CheckFirstBlock(this.block);
+                // 그전에 만들어진 프리팹 반환
+                IngameBlockPoolController.ReleaseNormalBlock(prefabObject.transform.GetChild(1).gameObject);
+                break;
+            default:
+                break;
+        }
     }
 
-    public void showGemstoneChangeEffect()
+    private void CreateNormalBlockPrefab(Transform createPos)
     {
-        GameObject prefab = IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.BlockPang_GemStone);
-        GameObject obj = Instantiate(prefab, this.transform);
-        obj.transform.position = this.transform.position;
+        // 노멀블록 프리팹 경로
+        StringBuilder blockAddress = new StringBuilder();
+        blockAddress.Append("GUI/Fx/Prefabs/Block/Normal/");
+        blockAddress.Append(GetSpriteName(block));
+        blockAddress.Append("/Block_");
+        blockAddress.Append(GetSpriteName(block));
+                    
+        // 기존 프리팹 Block 밑에 추가로 생성
+        GameObject blockObj = (GameObject)Resources.Load(blockAddress.ToString());
+        var animBlock = Instantiate(blockObj, createPos);
     }
+
+
+    #region ATEEZ
+
+    private static void SetSpecialAteez(BlockType type, GameObject specialObj,Action onFinishedCallback)
+    {
+        switch (type)
+        {
+            case BlockType.Rocket:
+                specialObj.transform.localScale = new Vector3(0.01f, 0.01f, 1);
+                float crossObjClipLength = specialObj.GetComponent<Animation>().clip.length;
+                
+                WaitForSec(crossObjClipLength, () =>
+                {
+                    onFinishedCallback?.Invoke();
+                });
+                break;
+            case BlockType.Mirrorball:
+                float mirrorBallClipLength = specialObj.GetComponent<Animation>().clip.length;
+                WaitForSec(mirrorBallClipLength, () =>
+                {
+                    onFinishedCallback?.Invoke();
+                });
+                break;
+            case BlockType.Bomb:
+                float bombObjClipLength = specialObj.GetComponent<Animation>().clip.length;
+                WaitForSec(bombObjClipLength, () =>
+                {
+                    onFinishedCallback?.Invoke();
+                });
+                break;
+            case BlockType.ShootingStar:
+                float finaleClipLength = specialObj.GetComponent<Animation>().clip.length;
+                WaitForSec(finaleClipLength, () =>
+                {
+                    onFinishedCallback?.Invoke();
+                });
+                break;
+        }
+    }
+
+    private static void DestroyAirplaneAteez(GameObject airplaneObj)
+    {
+        if(airplaneObj != null) airplaneObj.AddComponent<SelfDestroy>();
+    }
+    
+
+    #endregion
+    
 
     ////////////////// COORDINATION FUNCITONS //////////////////
 
