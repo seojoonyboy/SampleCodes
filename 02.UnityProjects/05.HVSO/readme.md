@@ -23,6 +23,8 @@ AI와 대전하는 PVE 컨텐츠가 있음.
 ===========================
 Gitlab으로 관리하였으며, develop/feature/release 브랜치로 나누어 관리함.    
 
+![Gitlab_Commit](https://github.com/user-attachments/assets/ae71fab3-a993-4b82-a90f-5ea2542cf672)   
+
 ***
 Socket TCP 통신을 통한 실시간 플레이어와 매칭.    
 또한, 게임 도중 네트워크가 불안정해지거나, 앱이 종료되는 경우 재접속 관련 처리.    
@@ -31,7 +33,7 @@ C# Reflection을 활용하여 Server-> Client Socket Message를 받아 처리함
 BattleConnector.cs 의 코드 일부.    
 > PlayerPrefab에 ReconnectData가 존재하는 경우, 재접속 로직을 타게 된다.
 > ReconnectData는 게임이 종료되는 시점에 게임종료 Socket Message를 전달받은 이후에 제거되기 때문에,   
-> 게임종료 Socket Message를 받지 못한 상황은 중간에 네트워크가 끊어진 상황으로 간주함.   
+> 게임종료 Socket Message를 받지 못한 상황은 중간에 네트워크가 끊어진 상황으로 간주함.
 
 <pre>
   <code>
