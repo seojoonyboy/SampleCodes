@@ -21,7 +21,8 @@ AI와 대전하는 PVE 컨텐츠가 있음.
 
 프로젝트 관리
 ===========================
-Gitlab으로 관리하였으며, develop/feature/release 브랜치로 나누어 관리함.    
+Gitlab으로 관리하였으며, develop/feature/release 브랜치로 나누어 관리.    
+이슈는 Mentis를 활용하여 관리.   
 
 ![Gitlab_Commit](https://github.com/user-attachments/assets/ae71fab3-a993-4b82-a90f-5ea2542cf672)   
 
