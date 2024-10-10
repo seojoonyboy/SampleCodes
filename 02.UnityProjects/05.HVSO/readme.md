@@ -8,7 +8,7 @@ Unity 기반 전략 카드 게임
 ==========================
 엔진 : Unity 2018.4.12f1      
 플랫폼 : Android, iOS   
-버전 관리 : Git, Gitlab
+버전 관리 : Git, Gitlab   
 이슈 관리 : Mentis   
 
 
