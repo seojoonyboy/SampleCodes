@@ -22,3 +22,60 @@ AI와 대전하는 PVE 컨텐츠가 있음.
 프로젝트 관리
 ===========================
 Gitlab으로 관리하였으며, develop/feature/release 브랜치로 나누어 관리함.    
+
+***
+Socket TCP 통신을 통한 실시간 플레이어와 매칭.    
+또한, 게임 도중 네트워크가 불안정해지거나, 앱이 종료되는 경우 재접속 관련 처리.    
+C# Reflection을 활용하여 Server-> Client Socket Message를 받아 처리함.    
+
+BattleConnector.cs 의 코드 일부.    
+> PlayerPrefab에 ReconnectData가 존재하는 경우, 재접속 로직을 타게 된다.
+> ReconnectData는 게임이 종료되는 시점에 게임종료 Socket Message를 전달받은 이후에 제거되기 때문에,   
+> 게임종료 Socket Message를 받지 못한 상황은 중간에 네트워크가 끊어진 상황으로 간주함.   
+
+<pre>
+  <code>
+    private void SocketConnected() 
+    {
+      object message;
+      string reconnect = PlayerPrefs.GetString("ReconnectData", null);
+      if(!string.IsNullOrEmpty(reconnect)) {
+          NetworkManager.ReconnectData data = JsonConvert.DeserializeObject<NetworkManager.ReconnectData>(reconnect);
+          bool isSameType = String.Compare(data.battleType, PlayerPrefs.GetString("SelectedBattleType"), StringComparison.Ordinal) == 0;
+          if(isSameType) {
+              message = SetJoinGameData(data);
+              SendMethod("reconnect_game", message);
+              return;
+          }
+          PlayerPrefs.DeleteKey("ReconnectData");
+          //재연결 실패단계?
+      }
+      message = SetJoinGameData();
+      SendMethod("join_game", message);
+      OnOpenSocket.Invoke();
+    }
+  </code>
+</pre>
+
+BattleConnector_receiver.cs 의 코드 일부   
+Server->Client로 전달받는 Socket Message는 C# Reflection을 활용한다.   
+
+<pre>
+  <code>
+    private void ExecuteSocketMessage(ReceiveFormat result) {
+        if(result.method == null) {dequeueing = false; return;}
+        MethodInfo theMethod = thisType.GetMethod(result.method);
+        if(theMethod == null) { Debug.LogError(result.method + "에 대한 함수가 없습니다!"); dequeueing = false; return;}
+        object[] args = new object[]{result.args, result.id, callback};
+        showMessage(result);
+        try {
+            theMethod.Invoke(this, args);
+        }
+        catch(Exception e) {
+            Debug.LogError("Message Method : " + result.method + "Error : " + e);
+            callback();
+        }
+    }
+  </code>
+</pre>
+
