@@ -1,6 +1,0 @@
-InputModeSelectPopup.cs 의 경우 플레이 모드를 선택하는 팝업을 제어합니다.
-  > 닌텐도에서 제공하는 본체 결합 형태, 콘솔 분리 + 자이로, 콘솔 분리 + 버튼 형태 모드
-
-NintendoPlayModeController.cs 의 경우 닌텐도 SDK에 접근하여 System UI 를 띄웁니다.
-  > 예) 본체와 콘솔 분리 유도하는 System UI
-
