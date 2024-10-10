@@ -36,7 +36,9 @@ STARWAY 3Match Puzzle Game
 STARWAY 신규 앱이 생길 때마다, Main Branch에서 새로운 Branch를 따는 방식   
 앱 단위로 feature/develop/release 브랜치로 관리   
 > 세부적으로 버전 정보까지 브랜치 이름에 담아 관리
-> 예시) SWAT/develop/1.1.201 [STARWAY ATEEZ develop 브랜치 버전 1.1.201
+> 예시) SWAT/develop/1.1.201 [STARWAY ATEEZ develop 브랜치 버전 1.1.201   
+
+![git_graph](https://user-images.githubusercontent.com/110382516/182572212-a39c47f8-a690-4514-9c4e-d98dc8c8238c.PNG)   
 
 ***
 
