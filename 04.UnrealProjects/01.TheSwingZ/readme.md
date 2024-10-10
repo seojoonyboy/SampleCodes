@@ -196,3 +196,168 @@ SVN을 통해 버전 관리
     }
   </code>
 </pre>
+
+***
+Decal을 활용한 지형 기울기 그리드 표현   
+
+![PuttingGrid](https://github.com/user-attachments/assets/71410d79-4483-47d3-b2c0-22109d56a8db)   
+
+
+<pre>
+  <code>
+    void ASGGrid::UpdateGridPoints(ASGPlayerCharacter* const InPlayer, const FVector& InVerticalDir, const FVector& InHorizonDir)
+    {
+    	TArray<FVector> points;
+    
+    	for (int32 y = 0; y < MaxVGridCount; ++y)
+    	{
+    		const FVector p = IsDebugGrid ?
+    			InPlayer->GetActorLocation() - InVerticalDir * (ONE_METER / 4) * (MaxVGridCount - 2) + InVerticalDir * (ONE_METER / 4) * y :
+    			InPlayer->GetActorLocation() - InVerticalDir * ONE_METER * (MaxVGridCount - 2) + InVerticalDir * ONE_METER * y;
+    		
+    		for (int32 x = 0; x < MaxHGridCount; ++x)
+    		{
+    			FVector point = IsDebugGrid ?
+    				p - InHorizonDir * 500.0f + InHorizonDir * x * (ONE_METER / 4) :
+    				p - InHorizonDir * 500.0f + InHorizonDir * x * ONE_METER;
+    
+    			// SG_LOG(Log, "SJW 222 point : %s", *point.ToString());
+    			
+    			if (SG_HOLE_CUP_DIAMETER >= FVector::Dist2D(HoleLoc, point))
+    			{
+    				point.Z = HoleLoc.Z;
+    				points.Add(point);
+    			}
+    			else
+    			{
+    				const FVector StartLoc = point + FVector(0.0f, 0.0f, 10000.0f);
+    				const FVector EndLoc = point - FVector(0.0f, 0.0f, 10000.0f);
+    
+    				FHitResult HitResult;
+    				const bool groundCheck = USGGroundChecker::LineTraceGroundCheck(HitResult, StartLoc, EndLoc, InPlayer);
+    				if (true == groundCheck)
+    				{
+    					point.Z = HitResult.ImpactPoint.Z;
+    					points.Add(point);
+    				}
+    			}
+    		}
+    	}
+    
+    	DecalHPoints.Empty();
+    	DecalVPoints.Empty();
+    	DecalHSpeed.Empty();
+    	DecalVSpeed.Empty();
+    	DecalHTime.Empty();
+    	DecalVTime.Empty();
+    
+    	// 가로 그리드 좌표 설정
+    	for (int32 y = 0; y < MaxVGridCount; ++y)
+    	{
+    		for (int32 x = 0; x < MaxHGridCount - 1; ++x)
+    		{
+    			int32 currHIndex = MaxHGridCount * y + x;
+    			if (points.IsValidIndex(currHIndex) && points.IsValidIndex(currHIndex + 1))
+    			{
+    				FVector DecalHRes = IsDebugGrid ?
+    					points[currHIndex] + InHorizonDir * 20.0f :
+    					points[currHIndex] + InHorizonDir * 50.0f;
+    				
+    				DecalHPoints.Add(DecalHRes);
+    
+    				//SG_LOG(Log, "SJW 222 DecalHPoints : %s", *DecalHRes.ToString());
+    				
+    				DecalHSpeed.Add((points[currHIndex].Z - points[currHIndex + 1].Z) * 0.1f);
+    				DecalHTime.Add(0);
+    			}
+    		}
+    	}
+    	// 세로 그리드 좌표 설정
+    	for (int32 x = 0; x < MaxHGridCount; ++x)
+    	{
+    		for (int32 y = 0; y < MaxVGridCount - 1; ++y)
+    		{
+    			int32 currIndex = MaxHGridCount * y + x;
+    			if (points.IsValidIndex(currIndex) && points.IsValidIndex(currIndex + MaxHGridCount))
+    			{
+    				FVector DecalVRes = IsDebugGrid ?
+    					points[currIndex] + InVerticalDir * 20.0f :
+    					points[currIndex] + InVerticalDir * 50.0f;
+    				
+    				DecalVPoints.Add(DecalVRes);
+    
+    				//SG_LOG(Log, "SJW 222 DecalVPoints : %s", *DecalVRes.ToString());
+    				
+    				DecalVSpeed.Add((points[currIndex].Z - points[currIndex + MaxHGridCount].Z) * 0.1f);
+    				DecalVTime.Add(0);
+    			}
+    		}
+    	}
+    }
+  </code>
+</pre>
+
+틱 단위로 지형 기울기가 심할수록 빠르게 Decal의 점 Texture가 흐르도록 한다.
+
+<pre>
+  <code>
+    void ASGGrid::Tick(float DeltaTime)
+    {
+    	Super::Tick(DeltaTime);
+    
+    	if (IsShow)
+    	{
+    		//UpdateGrid();
+    
+    		for (int32 i = 0; i < DecalHPoints.Num(); ++i)
+    		{
+    			if (DecalHPoints.IsValidIndex(i) && DecalHSpeed.IsValidIndex(i) && DecalHTime.IsValidIndex(i))
+    			{
+    				if(IsDebugGrid)
+    				{
+    					DecalHTime[i] += DecalHSpeed[i] * DeltaTime * 2.0f;
+    				}
+    				else
+    				{
+    					DecalHTime[i] += DecalHSpeed[i] * DeltaTime;
+    				}
+    				
+    				if (1.f < DecalHTime[i])
+    				{
+    					DecalHTime[i] -= 2.f;
+    				}
+    
+    				if (MIDs.IsValidIndex(i))
+    				{
+    					MIDs[i]->SetScalarParameterValue(TEXT("TimeParam"), DecalHTime.IsValidIndex(i) ? DecalHTime[i] * AddSpeedRatio : 0.5f);
+    				}
+    			}
+    		}
+    		for (int32 i = 0; i < DecalVPoints.Num(); ++i)
+    		{
+    			if (DecalVPoints.IsValidIndex(i) && DecalVSpeed.IsValidIndex(i) && DecalVTime.IsValidIndex(i))
+    			{
+    				if(IsDebugGrid)
+    				{
+    					DecalVTime[i] += DecalVSpeed[i] * DeltaTime * 2.0f;
+    				}
+    				else
+    				{
+    					DecalVTime[i] += DecalVSpeed[i] * DeltaTime;
+    				}
+    				
+    				if (1.f < DecalVTime[i])
+    				{
+    					DecalVTime[i] -= 2.f;
+    				}
+    
+    				if (MIDs.IsValidIndex(i + DecalHPoints.Num()))
+    				{
+    					MIDs[i + DecalHPoints.Num()]->SetScalarParameterValue(TEXT("TimeParam"), DecalVTime.IsValidIndex(i) ? DecalVTime[i] * AddSpeedRatio : 0.5f);
+    				}
+    			}
+    		}
+    	}
+    }
+  </code>
+</pre>
