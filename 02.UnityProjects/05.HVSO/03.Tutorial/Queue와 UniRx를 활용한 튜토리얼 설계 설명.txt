@@ -1,0 +1,205 @@
+//시나리오 관련 전체 챕터 정보를 가져온다
+public void ReadScenarioData() {
+        string dataAsJson = ((TextAsset)Resources.Load("TutorialDatas/HumanChapterDatas")).text;
+        human_chapterDatas = JsonReader.Read<List<ChapterData>>(dataAsJson);
+
+        dataAsJson = ((TextAsset)Resources.Load("TutorialDatas/OrcChapterDatas")).text;
+        orc_chapterDatas = JsonReader.Read<List<ChapterData>>(dataAsJson);
+
+        dataAsJson = ((TextAsset)Resources.Load("TutorialDatas/humanChallengeData")).text;
+        human_challengeDatas = JsonReader.Read<List<ChallengeData>>(dataAsJson);
+
+        dataAsJson = ((TextAsset)Resources.Load("TutorialDatas/orcChallengeData")).text;
+        orc_challengeDatas = JsonReader.Read<List<ChallengeData>>(dataAsJson);
+
+        MakeStoryPageList();
+}
+
+//챕터 단위로 Dictionary를 만든다.
+private void MakeStoryPageList() {
+        pageHumanStoryList = new Dictionary<int, List<ChapterData>>();
+        pageOrcStoryList = new Dictionary<int, List<ChapterData>>();
+
+        var queryPages =
+            from _chapterData in human_chapterDatas
+            group _chapterData by _chapterData.chapter into newGroup
+            orderby newGroup.Key
+            select newGroup;
+
+        foreach(var newGroup in queryPages) {
+            if (!pageHumanStoryList.ContainsKey(newGroup.Key)) pageHumanStoryList[newGroup.Key] = new List<ChapterData>();
+
+            foreach(var chapter in newGroup) {
+                pageHumanStoryList[newGroup.Key].Add(chapter);
+            }
+        }
+
+        queryPages =
+            from _chapterData in orc_chapterDatas
+            group _chapterData by _chapterData.chapter into newGroup
+            orderby newGroup.Key
+            select newGroup;
+
+        foreach(var newGroup in queryPages) {
+            if (!pageOrcStoryList.ContainsKey(newGroup.Key)) pageOrcStoryList[newGroup.Key] = new List<ChapterData>();
+
+            foreach(var chapter in newGroup) {
+                pageOrcStoryList[newGroup.Key].Add(chapter);
+            }
+     }
+}
+
+//현재 챕터에 해당하는 Data를 Dictionary에서 찾아서 Queue에 쌓는다.
+private bool InitQueue() {
+        if (chapterData == null) return false;
+
+        chapterQueue = new Queue<ScriptData>();
+        foreach (ScriptData scriptData in chapterData.scripts) {
+            chapterQueue.Enqueue(scriptData);
+        }
+        ScenarioMask.Instance.gameObject.SetActive(true);
+        return true;
+}
+
+//Update문에서 하나씩 Dequeue하여 Initialize 함수를 호출한다.
+ void FixedUpdate() {
+        if (!canNextChapter) return;
+        DequeueChapter();
+    }
+
+private void DequeueChapter() {
+    canNextChapter = false;
+    if(chapterQueue.Count == 0) {
+        return;
+    }
+    currentChapterData = chapterQueue.Dequeue();
+    GetComponent<ScenarioExecuteHandler>().Initialize(currentChapterData);
+}
+
+public void Initialize(ScriptData data) {
+    StartCoroutine(MethodExecute(data));
+}
+
+//전달 받은 ScriptData 내부에 존재하는 Method들을 코루틴을 활용하여 하나씩 순차적으로 처리되도록 진행한다.
+IEnumerator MethodExecute(ScriptData data) {
+    foreach(var exec in sets) { Destroy(exec); }
+    sets = new List<ScenarioExecute>();
+
+    foreach (Method method in data.methods) {
+        ScenarioExecute exec = (ScenarioExecute)gameObject.AddComponent(Type.GetType(method.name));
+        if(exec == null) { Logger.LogError(method.name + "에 대한 클래스를 찾을 수 없습니다!"); break; }
+        sets.Add(exec);
+        exec.Initialize(method.args);
+    }
+    coroutine = SkillTrigger();
+    yield return coroutine;
+}
+
+//IsDone을 Wait 한다.
+IEnumerator SkillTrigger(ScenarioGameManagment.EndingChapterDataFinished callback = null) {
+    foreach(ScenarioExecute execute in sets) {
+        isDone = false;
+        execute.Execute();
+        PlayMangement.instance.currentExecute = execute;
+#if UNITY_EDITOR
+        ShowDebugText(execute);
+#endif
+         yield return new WaitUntil(() => isDone);
+    }
+    GetComponent<PlayMangement>().canNextChapter = true;
+    callback?.Invoke();
+}
+
+
+//Method 별로 IsDone 이 true 로 바뀌는 기준이 다르다. 각 Method 별 기준은 ScenearioExecute.cs 를 참고하면된다.
+//예를 들어 Wait_click Method의 경우 클릭 이벤트를 UniRx를 통해 감지하면 IsDone이 true로 변경된다.
+
+public class Wait_click : ScenarioExecute {
+    public Wait_click() : base() { }
+
+    IDisposable clickstream;
+    IDisposable delayTimer;
+
+    public override void Execute() {
+        GameObject target;
+
+        if (args[0] == "screen") {
+            target = null;
+        }
+        else if (args.Count > 2)
+            target = scenarioMask.GetMaskingObject(args[0], args[1], args[2]);
+        else if (args.Count > 1)
+            target = scenarioMask.GetMaskingObject(args[0], args[1]);
+        else
+            target = scenarioMask.GetMaskingObject(args[0]);
+
+
+        Button button = (target != null) ? target.GetComponent<Button>() : null;        
+
+        if (button != null)
+            clickstream = button.OnClickAsObservable().Subscribe(_ => CheckButton());
+        else {
+            IObservable<long> click = Observable.EveryUpdate().Where(_ => Input.GetMouseButtonDown(0));
+            
+
+            if (args.Count > 2) {
+                float time = float.Parse(args[2]);
+                delayTimer = Observable.Timer(TimeSpan.FromSeconds(time))
+                            .First()
+                            .Subscribe(_ => {
+                                clickstream = click.Subscribe(x => CheckClick(target));
+                            });
+            }
+            else 
+                clickstream = click.Subscribe(_ => CheckClick(target));
+            
+        }      
+        //Observable.EveryUpdate().Where(_ => handler.isDone == true).Subscribe(_ => { clickstream.Dispose(); Debug.Log("테스트!"); });
+
+        if(args.Count > 1 && args[1] == "endTurn") {
+            GameObject endTurn = scenarioMask.GetMaskingObject("button", "endTurn");
+            GameObject handicon = scenarioMask.GetMaskingObject("turn_handicon");
+            endTurn.GetComponent<Button>().enabled = true;
+            handicon.SetActive(true);
+        }
+
+        //
+
+        Logger.Log("Wait_click");
+    }
+
+    public void CheckClick(GameObject target) {
+        if (target == null) {
+            clickstream.Dispose();
+            delayTimer?.Dispose();
+
+            if (args.Count > 1 && args[1] == "off") {
+                scenarioMask.StopEveryHighlight();
+                scenarioMask.HideText();
+                PlayMangement.instance.stopSelect = false;
+            }
+            if (args.Count > 1 && args[1] == "endTurn") {
+                GameObject endTurn = scenarioMask.GetMaskingObject("button", "endTurn");
+                GameObject handicon = scenarioMask.GetMaskingObject("turn_handicon");
+                endTurn.GetComponent<Button>().enabled = false;
+            }
+            handler.isDone = true;
+        }
+        else {
+            UnityEngine.EventSystems.PointerEventData clickEvent = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
+            if (clickEvent.pointerPress.gameObject.name == target.name) {
+                clickstream.Dispose();
+                handler.isDone = true;
+            }
+            else
+                handler.isDone = false;
+        }
+    }
+
+    public void CheckButton() {
+        clickstream.Dispose();
+        scenarioMask.StopEveryHighlight();
+        PlayMangement.instance.stopSelect = false;
+        handler.isDone = true;
+    }
+}
