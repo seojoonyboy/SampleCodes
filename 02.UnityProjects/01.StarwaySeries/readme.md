@@ -40,8 +40,16 @@ STARWAY 신규 앱이 생길 때마다, Main Branch에서 새로운 Branch를 �
 
 ![git_graph](https://user-images.githubusercontent.com/110382516/182572212-a39c47f8-a690-4514-9c4e-d98dc8c8238c.PNG)   
 
-Github Issue Tracker, Microsoft Planner를 이용하여 Issue를 관리   
+프로젝트(앱) 단위로 Branch로 통합 관리
 ![Branch 종류에 대한 설명 이미지](/02.UnityProjects/01.StarwaySeries/99.Images/Branch_종류.PNG)   
+
+Git 원격저장소를 통한 협업  
+![Github Commit 예시](/02.UnityProjects/01.StarwaySeries/99.Images/Github_Commit.PNG)   
+
+Github Issue Tracker, Microsoft Planner를 이용하여 Issue를 관리   
+![Github Issue Tracker](/02.UnityProjects/01.StarwaySeries/99.Images/Github_Issue.PNG)   
+![Github Issue Detail](/02.UnityProjects/01.StarwaySeries/99.Images/Github_Issue_detail_01.PNG)   
+![Github Issue Detail2](/02.UnityProjects/01.StarwaySeries/99.Images/Github_Issue_detail_02.PNG)   
 
 
 ***
