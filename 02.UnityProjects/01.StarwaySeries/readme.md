@@ -1,14 +1,14 @@
 STARWAY 3Match Puzzle Game
 ==========================
-> 스노우볼스 3Match 퍼즐 클라이언트 개발
-> 개발 기간 : 2022.05 ~ 2024.01
-> 출시 여부 : Google PlayStore, Apple Store 정식 런칭 [24.05 서비스 종료 상태]
+> 스노우볼스 3Match 퍼즐 클라이언트 개발   
+> 개발 기간 : 2022.05 ~ 2024.01   
+> 출시 여부 : Google PlayStore, Apple Store 정식 런칭 [24.05 서비스 종료 상태]   
 
 개발 환경
 ==========================
-엔진 : Unity 3d Engine 2021.3.23f1
-플랫폼 : Android, iOS
-버전 관리 : Git, Github
+엔진 : Unity 3d Engine 2021.3.23f1   
+플랫폼 : Android, iOS   
+버전 관리 : Git, Github   
 
 
 프로젝트 소개
