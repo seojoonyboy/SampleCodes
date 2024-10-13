@@ -1,3 +1,176 @@
+개방 폐쇄원칙(Open-Closed Pricipal)에 입각한 팝업창 설계
+================
+
+모든 팝업은 Popup 클래스를 상속받아 설계   
+![Popup](https://github.com/user-attachments/assets/0b8bb013-63eb-402c-ae1d-b25aa1d25509)   
+
+내부 함수는 Virtual 함수로 작성하여, 공통 기본 동작을 기술   
+<pre>
+  <code>
+    public virtual void OnOpen()
+    {
+        GoodsView.Instance.MailBox.SetActive(false);
+        
+        var param = this.paramBuffer;
+
+
+        string localeHeaderText = this.GetLocaleHeaderText();
+
+        if (this.headerText)
+        {
+            this.headerText.text = !string.IsNullOrEmpty(localeHeaderText)
+                ? (param.headerArgs != null && param.headerArgs.Length > 0) ? string.Format(localeHeaderText, param.headerArgs) : localeHeaderText
+                : param.dummyHeaderText;
+        }
+
+        if (this.context)
+        {
+            this.context.text = param.contextLocaleCode.HasValue
+                    ? (param.contextArgs != null && param.contextArgs.Length > 0) ? string.Format(this.GetSystemLocale(param.contextLocaleCode.Value), param.contextArgs) : this.GetSystemLocale(param.contextLocaleCode.Value)
+                    : param.dummyContext;
+        }
+
+
+        if (!string.IsNullOrEmpty(param.dummyYesBtnContext))
+        {
+            if (this.yesBtnText)
+                this.yesBtnText.text = param.dummyYesBtnContext;
+        }
+
+        if (param.yesBtnLocaleCode.HasValue)
+        {
+            if (this.yesBtnText)
+            {
+                this.yesBtnText.text = this.GetSystemLocale(param.yesBtnLocaleCode.Value);
+
+                if (String.IsNullOrEmpty(this.yesBtnText.text))
+                    this.yesBtnText.text = LocaleController.GetSystemLocale(param.yesBtnLocaleCode.Value);
+            }
+        }
+
+
+        if (!string.IsNullOrEmpty(param.dummyNoBtnContext))
+        {
+            if (this.noBtnText)
+                this.noBtnText.text = param.dummyNoBtnContext;
+        }
+        if (param.noBtnLocaleCode.HasValue)
+        {
+            if (this.noBtnText)
+            {
+                this.noBtnText.text = this.GetSystemLocale(param.noBtnLocaleCode.Value);
+
+                if (String.IsNullOrEmpty(this.noBtnText.text))
+                    this.noBtnText.text = LocaleController.GetSystemLocale(param.noBtnLocaleCode.Value);
+            }
+        }
+
+
+        if (param.sideContextLocaleCode.HasValue)
+        {
+            if(this.sideContextObj)
+                this.sideContextObj.SetActive(true);
+
+            if (this.sideContext)
+            {
+                this.sideContext.text = (param.sideContextArgs != null && param.sideContextArgs.Length > 0) ? string.Format(this.GetSystemLocale(param.sideContextLocaleCode.Value), param.sideContextArgs) : this.GetSystemLocale(param.sideContextLocaleCode.Value);
+
+                if (String.IsNullOrEmpty(this.sideContext.text))
+                    this.sideContext.text = LocaleController.GetSystemLocale(param.sideContextLocaleCode.Value);
+            }
+
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(param.dummySideContext))
+            {
+                if (this.sideContextObj)
+                    this.sideContextObj.SetActive(true);
+
+                if (this.sideContext)
+                    this.sideContext.text = param.dummySideContext;
+            }
+            else
+            {
+                if (this.sideContextObj)
+                    this.sideContextObj.SetActive(false);
+            }
+        }
+
+        if (this.closeBtn)
+            this.closeBtn.gameObject.SetActive(param.isCloseBtnNeed);
+    }
+
+    #region Inspector connect functions
+    //(확인)팝업 닫기
+    //Inspector 상으로 버튼 연결용 함수
+    public virtual void OnTriggerOk()
+    {
+        this.result.isOnOk = true;
+        this.result.isOnX = false;
+
+        if(this.IsSoundExistPopup())
+            CommonProcessController.PlayEffectSound("Common", 1);
+
+        this.Close();
+    }
+
+    //(취소)팝업 닫기
+    //Inspector 상으로 버튼 연결용 함수
+    public virtual void OnTriggerX()
+    {
+        this.result.isOnOk = false;
+        this.result.isOnX = true;
+
+        if(this.IsSoundExistPopup())
+            CommonProcessController.PlayEffectSound("Common", 1);
+        
+        this.Close();
+    }
+
+    public virtual void OnBack()
+    {
+        if (this.paramBuffer.isLockBackButton)
+        {
+            return;
+        }
+
+        if (this.paramBuffer.backButtonType == BackButtonType.Cancel)
+        {
+            OnTriggerX();
+        }
+        else
+        {
+            OnTriggerOk();
+        }
+    }
+
+    #endregion
+
+    public virtual void Close()
+    {
+        this.ResultCallback?.Invoke(this, this.result);
+
+        foreach (var tweenAnimation in GetComponents<DOTweenAnimation>())
+        {
+            tweenAnimation.DOKill();
+        }
+
+        this.LoadedCallback = null;
+        
+        if(this.IsSoundExistPopup())
+            CommonProcessController.PlayButtonSound();
+
+        PopupRoot.Instance.RemovePopup(this);
+        if (!PopupRoot.Instance.IsPopupExist())
+        {
+            PopupRoot.Instance.enabled = false;
+        }
+        
+    }
+  </code>
+</pre>
+
 MVC 패턴   
 ================
 
