@@ -45,7 +45,7 @@ Sample Code
 > 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/CardSkillBlockLogic.md)   
 
 *패턴 설계*
-> MVC 패턴을 활용한 팝업 UI 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/PopupUIPattern.md)
-> 기획자 편의를 제공한 UniTask, Linq, Queue기반 튜토리얼 시스템 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/TutorialPattern.md)
+> MVC 패턴을 활용한 팝업 UI 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/PopupUIPattern.md)   
+> 기획자 편의를 제공한 UniTask, Linq, Queue기반 튜토리얼 시스템 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/TutorialPattern.md)   
 
 ***
