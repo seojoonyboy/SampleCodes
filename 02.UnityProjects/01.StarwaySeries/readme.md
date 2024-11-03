@@ -45,6 +45,6 @@ STARWAY 3Match Puzzle Game
 Sample Code
 ============================
 
-네트워크 처리 관련 : 교차 검증을 통한 Server-Client 인앱 구매 처리  [샘플코드와 상세 코드 설명]
+네트워크 처리 관련 : 교차 검증을 통한 Server-Client 인앱 구매 처리  [샘플코드와 상세 코드 설명](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/IAPProcess.md)
 ![image](https://github.com/user-attachments/assets/53ac0c47-3160-4cee-9d56-e2352e3aa898)   
 ***
