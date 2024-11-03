@@ -50,7 +50,7 @@ Sample Code
 
 *UniTask를 활용한 퍼즐 로직 구현*
 > 일반 블록 제거 및 채우기 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/BlockMatchLogic.md)   
-> 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/04.CardSkill/CardSkillController.cs)   
+> 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/CardSkillBlockLogic.md)   
 
 *패턴 설계*
 > MVC 패턴을 활용한 팝업 UI 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/PopupUIPattern.md)
