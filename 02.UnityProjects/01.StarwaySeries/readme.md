@@ -48,4 +48,6 @@ Sample Code
 > 교차 검증을 통한 Server-Client 인앱 구매 처리 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/IAPProcess.md)   
 > 추가 리소스 다운로드와 네트워크 불안정 환경 대응 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/AdditionalResourceDownload.md)   
 
+*패턴 설계*
+> MVC 패턴을 활용한 팝업 UI 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/PopupUIPattern.md)   
 ***
