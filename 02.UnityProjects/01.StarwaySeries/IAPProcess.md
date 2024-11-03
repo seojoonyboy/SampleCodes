@@ -1,3 +1,6 @@
+![image](https://github.com/user-attachments/assets/53ac0c47-3160-4cee-9d56-e2352e3aa898)   
+
+
 1단계 : Unity Purchasing Library를 활용하여 Apple, Google Store 구매 처리 진행   
 <pre>
 	<code>
