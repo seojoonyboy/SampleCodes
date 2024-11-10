@@ -1,4 +1,6 @@
-1단계 : 제거 대상이 되는 일반 블록 목록을 만든다. [match.Analyse 함수]
+### 일반 블록 제거와 채워지는 과정 구현
+
+> 제거 대상이 되는 일반 블록 목록을 만든다. [match.Analyse 함수]
 > NormalMatch 생성자에서 특수블록 생성 조건에 규합하는 일반 블록 조합이 있는지 배열에 순서대로 담는다.
 
 <pre>
@@ -37,7 +39,9 @@
   </code>
 </pre>
 
-순서대로 담은 배열[getters]을 순회하며 매칭되는(제거될) 일반 블록을 총합한다.
+---   
+
+> 순서대로 담은 배열[getters]을 순회하며 매칭되는(제거될) 일반 블록을 총합한다.   
 <pre>
   <code>
     public NormalMatchResult Analyse(Cell cell)
@@ -55,7 +59,9 @@
   </code>
 </pre>
 
-일반 블록을 실제로 제거한다.
+---
+
+> 일반 블록을 실제로 제거한다.
 <pre>
   <code>
     if (null != result) {
@@ -67,7 +73,9 @@
   </code>
 </pre>
 
-그 이후에 특수 블록도 제거한다.
+---
+
+> 그 이후에 특수 블록도 제거한다.
 <pre>
   <code>
     if (null != meSpecial.block) {
@@ -283,6 +291,35 @@
                 this.coMatchAndGravity = null;
             this.delegateCheckResultModalNeed?.Invoke();
         }
+    }
+  </code>
+</pre>
+
+---
+
+> 블록이 채워지기 위해 각각의 블록이 이동경로를 만드는 과정
+
+<pre>
+  <code>
+    public static Dictionary<Block, List<Toss>> CalcMovements(Stage s)
+    {
+        List<Snap> snaps = Gravity.CalcSnaps(s);
+        if (null != snaps) {
+            Dictionary&lt;Block, List&lt;Toss>> movements = new Dictionary&lt;Block, List&lt;Toss>>();
+            foreach (Snap snap in snaps) {
+                foreach (Toss toss in snap.tosses) {
+                    if (null == toss.block)
+                        Debug.Log("ERROR : toss가 널 입니다.");
+                    else {
+                        if (! movements.ContainsKey(toss.block))
+                            movements.Add(toss.block, new List<Toss>());
+                        movements[toss.block].Add(toss);
+                    }
+                }
+            }
+            return movements;
+        } else
+            return null;
     }
   </code>
 </pre>
