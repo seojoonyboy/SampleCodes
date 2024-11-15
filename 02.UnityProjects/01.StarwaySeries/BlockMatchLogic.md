@@ -55,7 +55,7 @@
   </script>
 </pre>
 
-> AnalyseAll 함수 정의
+> AnalyseAll 함수 정의   
 > (제거가 가능한) 유효한 블록이면서 getter(delegate 형태)에서 매칭이 존재하는 경우   
 <pre>
   <code>
