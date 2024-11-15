@@ -64,13 +64,20 @@
         MatchType matchType;
         var result = new List<NormalMatchResult>();
         foreach (Zone z in s.zones)
+        {
             foreach (Getter getter in this.getters)
+            {
                 for (int r = z.bottom; z.top <= r; r--)
-                    for (int c = z.right; z.left <= c; c--) {
-                        Cell cell = s.cells[r,c];
+                {
+                    for (int c = z.right; z.left <= c; c--)
+                    {
+                        Cell cell = s.cells[r, c];
                         if (this.IsValidCell(cell) && getter(z, cell, out outputs, out matchType))
                             result.Add(new NormalMatchResult(cell.block.type, outputs, matchType));
                     }
+                }
+            }
+        }
         this.s.matchCount++;
         return 0 < result.Count ? result : null;
     }
