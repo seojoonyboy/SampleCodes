@@ -41,6 +41,7 @@ Sample Code
 > 추가 리소스 다운로드와 네트워크 불안정 환경 대응 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/AdditionalResourceDownload.md)   
 
 *UniTask를 활용한 퍼즐 로직 구현*
+> 퍼즐 스테이지 최초 초기화 과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/PuzzleInit.md)
 > 일반 블록 제거 및 채우기 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/BlockMatchLogic.md)   
 > 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/01.StarwaySeries/CardSkillBlockLogic.md)   
 
