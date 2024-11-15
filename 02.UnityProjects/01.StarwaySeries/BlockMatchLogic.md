@@ -13,6 +13,8 @@
   </code>
 </pre>
 
+> NormalMatch 생성자
+
 <pre>
   <code>
     public NormalMatch(Stage stage, List<Block> excludedBlocks = null)
