@@ -43,20 +43,36 @@
 
 ---   
 
+> 3Match 가 일어난 이후
 > 순서대로 담은 배열[getters]을 순회하며 매칭되는(제거될) 일반 블록을 총합한다.   
+> match.AnalyseAll() 호출   
+  - result.Add(new NormalMatchResult(cell.block.type, outputs, matchType));
+
+<pre>
+  <script>
+    NormalMatch match = new NormalMatch(this.stage);
+    List<NormalMatchResult> results = match.AnalyseAll();
+  </script>
+</pre>
+
+> AnalyseAll 함수 정의   
 <pre>
   <code>
-    public NormalMatchResult Analyse(Cell cell)
+    public List<NormalMatchResult> AnalyseAll()
     {
         Cell[] outputs;
         MatchType matchType;
-        foreach (Getter getter in this.getters) {
-            Zone z = this.FindZone(cell);
-            if (null != z && this.IsValidCell(cell) && getter(z, cell, out outputs, out matchType))
-                return new NormalMatchResult(cell.block.type, outputs, matchType);
-        }
+        var result = new List<NormalMatchResult>();
+        foreach (Zone z in s.zones)
+            foreach (Getter getter in this.getters)
+                for (int r = z.bottom; z.top <= r; r--)
+                    for (int c = z.right; z.left <= c; c--) {
+                        Cell cell = s.cells[r,c];
+                        if (this.IsValidCell(cell) && getter(z, cell, out outputs, out matchType))
+                            result.Add(new NormalMatchResult(cell.block.type, outputs, matchType));
+                    }
         this.s.matchCount++;
-        return null;
+        return 0 < result.Count ? result : null;
     }
   </code>
 </pre>
