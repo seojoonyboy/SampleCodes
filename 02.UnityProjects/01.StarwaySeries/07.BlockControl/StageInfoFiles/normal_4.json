@@ -1,0 +1,66 @@
+{
+  "header": {
+    "name": "normal_4",
+    "description": "4",
+    "collectionNo": 0,
+    "stageNo": 0,
+    "rowCount": 5,
+    "colCount": 5,
+    "totalTurn": "15",
+    "skillFeverMax": "70",
+    "isAutoOneZone": true,
+    "version": "1.0.24",
+    "createdAt": "2022-07-23T08:45:07.592Z"
+  },
+  "clears": [
+    {"type":103,"total":12},
+    {"type":0,"total":0},
+    {"type":0,"total":0}
+  ],
+  "components": {
+    "ALL": [{"type":105},{"type":103},{"type":104},{"type":101,"normalPoint":1}]
+  },
+  "genesises": [
+    {"row":0,"col":0,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":1,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":2,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":3,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":4,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]}
+  ],
+  "zones": [
+    {"left":0,"top":0,"right":4,"bottom":4}
+  ],
+  "cells": [
+    [
+      {"block":{"type":103,"normalPoint":1}},
+      {"block":{"type":104}},
+      {"block":{"type":105,"normalPoint":1}},
+      {"block":{"type":104,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1}}
+    ], [
+      {"block":{"type":101,"normalPoint":1}},
+      {"block":{"type":103}},
+      {"block":{"type":101,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1}},
+      {"block":{"type":105,"normalPoint":1}}
+    ], [
+      {"block":{"type":105,"normalPoint":1}},
+      {"block":{"type":101,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1}},
+      {"block":{"type":105,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1}}
+    ], [
+      {"block":{"type":104,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1}},
+      {"block":{"type":105,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1}},
+      {"block":{"type":104,"normalPoint":1}}
+    ], [
+      {"block":{"type":103,"normalPoint":1}},
+      {"block":{"type":104,"normalPoint":1}},
+      {"block":{"type":101,"normalPoint":1}},
+      {"block":{"type":105,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1}}
+    ]
+  ]
+}

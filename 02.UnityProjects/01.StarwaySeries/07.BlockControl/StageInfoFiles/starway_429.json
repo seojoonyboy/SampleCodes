@@ -1,0 +1,139 @@
+{
+  "header": {
+    "name": "normal_827",
+    "description": "스테이지139",
+    "collectionNo": 0,
+    "stageNo": 0,
+    "rowCount": 9,
+    "colCount": 9,
+    "totalTurn": 32,
+    "skillFeverMax": 40,
+    "isAutoOneZone": true,
+    "isShowZones": false,
+    "version": "2.2.6",
+    "createdAt": "2022-09-28T09:36:51.711Z"
+  },
+  "clears": [
+    {"type":210,"total":28},
+    {"type":212,"total":72},
+    {"type":0,"total":0}
+  ],
+  "components": {
+    "ALL": [{"type":101},{"type":104},{"type":103},{"type":105}]
+  },
+  "genesises": [
+    {"row":0,"col":0,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":1,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":2,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":3,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":4,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":5,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":6,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":7,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":8,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":0,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":1,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":2,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":3,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":5,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":6,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":7,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":3,"col":8,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]}
+  ],
+  "zones": [
+    {"left":0,"top":0,"right":8,"bottom":8}
+  ],
+  "cells": [
+    [
+      {"block":{"type":712,"nick":"A","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"A","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"B","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"B","rank":2,"attr":2}},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2}},
+      {"block":{"type":712,"nick":"C","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"C","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"D","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"D","rank":2,"attr":2}}
+    ], [
+      {"block":{"type":712,"nick":"A","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"A","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"B","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"B","rank":2,"attr":2}},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":712,"nick":"C","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"C","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"D","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"D","rank":2,"attr":2}}
+    ], [
+      {"type":2},
+      {"type":2},
+      {"type":2},
+      {"type":2},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"type":2},
+      {"type":2},
+      {"type":2},
+      {"type":2}
+    ], [
+      {"block":{"type":710,"normalSidePoint":1,"attr":2}},
+      {"block":{"type":105,"normalPoint":1}},
+      {"block":{"type":103,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2}},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":101,"normalPoint":1}},
+      {"block":{"type":104,"normalPoint":1}},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0}
+    ], [
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":103,"normalPoint":1},"attr":0},
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":101,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0}
+    ], [
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":103,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":101,"normalPoint":1},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0}
+    ], [
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0}
+    ], [
+      {"block":{"type":712,"nick":"E","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"E","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"F","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"F","rank":2,"attr":2}},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":0},
+      {"block":{"type":712,"nick":"G","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"G","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"H","rank":1,"normalSidePoint":10,"attr":2}},
+      {"block":{"type":712,"nick":"H","rank":2,"attr":2}}
+    ], [
+      {"block":{"type":712,"nick":"E","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"E","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"F","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"F","rank":2,"attr":2}},
+      {"type":2},
+      {"block":{"type":712,"nick":"G","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"G","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"H","rank":2,"attr":2}},
+      {"block":{"type":712,"nick":"H","rank":2,"attr":2}}
+    ]
+  ]
+}

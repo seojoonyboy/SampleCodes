@@ -1,0 +1,140 @@
+{
+  "header": {
+    "name": "normal_825",
+    "description": "스테이지136",
+    "collectionNo": 0,
+    "stageNo": 0,
+    "rowCount": 9,
+    "colCount": 9,
+    "totalTurn": 28,
+    "skillFeverMax": 40,
+    "isAutoOneZone": true,
+    "isShowZones": false,
+    "version": "2.2.6",
+    "createdAt": "2022-09-28T09:36:35.329Z"
+  },
+  "clears": [
+    {"type":210,"total":40},
+    {"type":201,"total":6},
+    {"type":0,"total":0}
+  ],
+  "components": {
+    "ALL": [{"type":101},{"type":104},{"type":103},{"type":105}]
+  },
+  "genesises": [
+    {"row":0,"col":1,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":2,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":3,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":4,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":5,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":6,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":7,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":0,"col":8,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":1,"col":0,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":4,"col":5,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":4,"col":6,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":4,"col":7,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":4,"col":8,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":6,"col":4,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":6,"col":5,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":6,"col":6,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":6,"col":7,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]},
+    {"row":6,"col":8,"type":1,"blocks":[{"type":902,"componentName":"ALL"}]}
+  ],
+  "zones": [
+    {"left":0,"top":0,"right":8,"bottom":8}
+  ],
+  "cells": [
+    [
+      {"type":2},
+      {"block":{"type":105,"normalPoint":1}},
+      {"block":{"type":104,"normalPoint":1}},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2}},
+      {"block":{"type":701,"normalPoint":9999},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":701,"normalPoint":9999},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":701,"normalPoint":9999},"attr":0}
+    ], [
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":104,"normalPoint":1}},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2}}
+    ], [
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2}
+    ], [
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":105,"normalPoint":1},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2}},
+      {"type":2},
+      {"type":2},
+      {"type":2},
+      {"type":2},
+      {"type":2}
+    ], [
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":2,"attr":2}},
+      {"type":2},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0}
+    ], [
+      {},
+      {},
+      {},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"type":2},
+      {"type":2},
+      {"type":2},
+      {"type":2},
+      {"type":2}
+    ], [
+      {"block":{"type":710,"normalSidePoint":3,"attr":2}},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":701,"normalPoint":9999}},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":701,"normalPoint":9999},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":701,"normalPoint":9999},"attr":0}
+    ], [
+      {"attr":2},
+      {},
+      {},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":0},
+      {"block":{"type":104,"normalPoint":1},"attr":0},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2}},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":0}
+    ], [
+      {"type":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":1,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2},
+      {"block":{"type":710,"normalSidePoint":3,"attr":2},"attr":2}
+    ]
+  ]
+}
