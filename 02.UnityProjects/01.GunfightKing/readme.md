@@ -20,6 +20,7 @@ GunfightKing Mobile FPS Game
 
 Sample Code
 ============================
+> 무기별 탄퍼짐 로직 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/06.%20BulletSpread)   
 > Bot 이동 설계 도구1 - 엄폐 포인트 세팅 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/01.%20CoverPoint)   
 > Bot 이동 설계 도구2 - 주요 이동 포인트 세팅 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/02.%20WayPoint)   
 > Bot 행동 패턴 설계 - 이동/공격/탐색 등 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/04.%20StateMachine)   
