@@ -42,7 +42,7 @@ Sample Code
 
 *UniTask를 활용한 퍼즐 로직 구현*
 > 퍼즐 스테이지 최초 초기화 과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PuzzleInit.md)   
-> 일반 블록 제거 및 채우기 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md)   
+> 미션 블록 처리과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md)   
 > 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/CardSkillBlockLogic.md)   
 
 *패턴 설계*
