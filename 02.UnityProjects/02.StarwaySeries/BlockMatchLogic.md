@@ -1,351 +1,156 @@
-### 일반 블록 제거와 채워지는 과정 구현
+다음은 미션 블록 처리에 대한 로직 설명입니다.
 
-> 제거 대상이 되는 일반 블록 목록을 만든다. [match.Analyse 함수]
-> NormalMatch 생성자에서 특수블록 생성 조건에 규합하는 일반 블록 조합이 있는지 배열에 순서대로 담는다.
+* 동일 기능 파생 블록(4자리 타입)을 베이스 타입과 동일한 처리 파이프라인에 편입시켜, 콘텐츠 스킨 추가 시 코어 로직 수정 없이 확장 가능하도록 설계
+* 미션 블록 HP(=normalSidePoint) 변화는 diff 기반 감지로 스프라이트/이펙트 갱신을 최소화하여 퍼포먼스와 시각 피드백을 동시에 확보
+* 파괴 연출은 Explode 코루틴에서 타입 그룹핑으로 관리해 룰/연출의 일관성과 유지보수성을 강화
 
-<pre>
-  <code>
-    NormalMatch match = new NormalMatch(this.stage);
-    NormalMatchResult result = match.Analyse(youNormal);
-    BlockType targetBlockType = youNormal.block.type;
-    youNormal.block.attr = BlockAttr.Movable;
-    List<Block> excludedBlocks = null;
-  </code>
-</pre>
+> IceCube를 예시로 활용
 
-> NormalMatch 생성자
+# IceCube(BlockType.IceCube = 7101) 라이프사이클 요약 (InitStage → AttackNormal → Explode/Destroy)
 
-<pre>
-  <code>
-    public NormalMatch(Stage stage, List<Block> excludedBlocks = null)
-    {
-        this.s = stage;
-        // 매칭에 포함 안되어야 할 블럭들
-        this.uniq = new HashSet<Block>();
-        if (null != excludedBlocks)
-            foreach (Block block in excludedBlocks) 
-                if (null != block)
-                    this.uniq.Add(block);
-          
-        this.getters = new Getter[8] {
-            new Getter(this.GetSpecialFinaleMatch),
-            new Getter(this.GetSpecialLaserMatch),
-            new Getter(this.GetSpecialBombWith4Match),
-            new Getter(this.GetSpecialBombMatch),
-            new Getter(this.GetSpecialCrossMatch),
-            new Getter(this.GetSpecialTargetWith3Match),
-            new Getter(this.GetSpecialTargetMatch),
-            new Getter(this.GetNormalMatch),
-        };
-    }
-  </code>
-</pre>
-
----   
-
-> 3Match 가 일어난 이후
-> 순서대로 담은 배열[getters]을 순회하며 매칭되는(제거될) 일반 블록을 총합한다.   
-> match.AnalyseAll() 호출   
-  - result.Add(new NormalMatchResult(cell.block.type, outputs, matchType));
-
-<pre>
-  <script>
-    NormalMatch match = new NormalMatch(this.stage);
-    List<NormalMatchResult> results = match.AnalyseAll();
-  </script>
-</pre>
-
-> AnalyseAll 함수 정의   
-> (제거가 가능한) 유효한 블록이면서 getter(delegate 형태)에서 매칭이 존재하는 경우   
-<pre>
-  <code>
-    public List<NormalMatchResult> AnalyseAll()
-    {
-        Cell[] outputs;
-        MatchType matchType;
-        var result = new List<NormalMatchResult>();
-        foreach (Zone z in s.zones)
-        {
-            foreach (Getter getter in this.getters)
-            {
-                for (int r = z.bottom; z.top <= r; r--)
-                {
-                    for (int c = z.right; z.left <= c; c--)
-                    {
-                        Cell cell = s.cells[r, c];
-                        if (this.IsValidCell(cell) && getter(z, cell, out outputs, out matchType))
-                            result.Add(new NormalMatchResult(cell.block.type, outputs, matchType));
-                    }
-                }
-            }
-        }
-        this.s.matchCount++;
-        return 0 < result.Count ? result : null;
-    }
-  </code>
-</pre>
+> 대상 코드
+- `Assets/Scripts/Artistar/Puzzle/Core/Type.cs`
+- `Assets/Scripts/Controller/StageController.cs`
+- `Assets/Scripts/Controller/Blocks/BlockController.cs`
 
 ---
 
-> 일반 블록을 실제로 제거한다.
-<pre>
-  <code>
-    if (null != result) {
-        // 노말블럭을 삭제해주고
-        Block newSpecialBlock = this.AttackNormal(result);
-        excludedBlocks = new List<Block>() { newSpecialBlock };
-        await UniTask.Delay(TimeSpan.FromSeconds(0.2f));
+## 0) IceCube는 “Woodbox(710)와 동일 기능” 파생 타입
+
+`Type.cs`에서 IceCube(7101)는 **Woodbox(710)와 동일 기능(룰/피격 방식 공유)** 으로 정의되어 있음.
+
+```csharp
+// 동일기능, 나무상자타입 추가 = Woodbox(710)
+IceCube = 7101,
+TopiarySpring = 7102,
+TopiaryWinter = 7103,
+FloorLamp = 7104,
+```
+
+1) Stage 로드 시점: InitStage에서 블록 생성/배치
+1-1. StageController.LoadStage → InitStage 호출
+
+```csharp
+public void LoadStage(JObject obj) {
+  this.stage.FromJObject(obj);
+  this.InitOffset();
+  this.InitStage(obj);
+  StartCoroutine(this.coMatchAndGravity = this.MatchAndGravity());
+}
+```
+
+1-2. InitStage에서 cell.block 기반으로 BlockController.Create 수행
+
+```csharp
+for (int r = 0; r < this.stage.rowCount; r++){
+  for (int c = 0; c < this.stage.colCount; c++) {
+    Cell cell = this.stage.cells[r, c];
+    Block block = cell.block;
+  
+    if (null != block) {
+      // ... Random 처리 생략 ...
+  
+      // 일반 케이스는 화면에 생성
+      BlockController.Create(block, r, c);
     }
-  </code>
-</pre>
+  }
+}
+```
 
----
+2) “피격 → HP 감소” 단계: AttackNormal이 호출되는 흐름
+2-1. 일반 매칭 발생 시 AttackNormal이 실행됨
 
-> 그 이후에 특수 블록도 제거한다.
-<pre>
-  <code>
-    if (null != meSpecial.block) {
-        meSpecial.block.attr = BlockAttr.Movable;
-        await this.AttackSpecial(meSpecial, targetBlockType, excludedBlocks);
+```csharp
+private Block AttackNormal(NormalMatchResult match) {
+  Block specialblock = Block.FactoryBySpecialMatch(match.type);
+
+  // 노말사이드어택(주변 미션블록 등에 영향)
+  this.AttackNormalSide(match);
+
+  // 매치된 셀들 블록을 실제로 터뜨림
+  foreach (Cell cell in match.cells) {
+    if (null != cell.block) {
+      Block block = cell.block;
+      block.normalPoint = Math.Max(0, block.normalPoint - 1);
+
+      if (block.IsDead) {
+        BlockController controller = this.FindBlockController(block);
+        if (null != controller) StartCoroutine(controller.Explode());
+        this.stage.RemoveBlock(cell);
+      }
     }
-  </code>
-</pre>
+  }
+  ...
+}
 
-제거 이후 빈칸을 블록들이 이동하는 처리를 진행한다. [MatchAndGravity]
-<pre>
-  <code>
-    this.coMatchAndGravity = this.MatchAndGravity();
-  </code>
-</pre>
+```
 
-<pre>
-  <code>
-    public async UniTask MatchAndGravity()
-    {
-        this.dirtyCount++;
-        this.gravityStackCount++;
-        try {
-            // 앞서 이동 진행을 마무리 한 후, 재 계산으로 들어간다.
-            await UniTask.WaitUntil(() => 0 == BlockController.gravityCount);
+3) IceCube의 HP(=normalSidePoint) 감소가 화면에 반영되는 방식
+IceCube/Woodbox 계열은 BlockController.Update()에서 normalSidePoint 변화 감지 → 스프라이트 갱신 + 피격 이펙트를 처리함.
 
-            for (;;) {
+```csharp
+case BlockType.Woodbox:
+case BlockType.IceCube:
+case BlockType.TopiarySpring:
+case BlockType.TopiaryWinter:
+case BlockType.FloorLamp:
+  if (this.prevNormalSidePoint != block.normalSidePoint) {
+    SpriteRenderer sr = this.blockObject.GetComponent<SpriteRenderer>();
+    sr.sprite = Resources.Load("Blocks/110/" + this.GetSpriteName(), typeof(Sprite)) as Sprite;
 
-                this.hintController.Unselect();
+    this.prevNormalSidePoint = block.normalSidePoint;
+    Play(IngameFxResource.Instance.GetPrefab(IngameFxResource.PrefabType.NormalExplosion),
+         this.transform.localPosition);
+  }
+  break;
 
-                if (this.isGraviting)
-                    throw new OperationCanceledException();
-                    //yield break;
+```
 
-                this.isGraviting = true;
-                try {
+또한 해당 계열의 스프라이트는 {type}-{normalSidePoint} 형태로 결정됨:
+```chsharp
+return ((int)block.type).ToString() + "-" + Math.Max(1, block.normalSidePoint).ToString();
+```
 
-                    ////////// MATCHING //////////
-                    
-                    // 트로피가 밑에까지 왔는지 검출한다.
-                    foreach (Cell cell in this.stage.throphyTerminalCells) {
-                        if (null != cell.block && BlockType.Trophy == cell.block.type) {
-                            if (this.stage.ClearCountdown(ClearType.Throphy))
-                            {
-                                CommonProcessController.MuteEffectSound("Ingame", 0);
-                                CommonProcessController.PlayEffectSound("Ingame", 20);
-                                
-                                await UniTask.Delay(TimeSpan.FromSeconds(0.4f));
-                                BlockController controller = this.FindBlockController(cell.block);
-                                if (null != controller)
-                                {
-                                    controller.Explode().Forget();
-                                }
+4) 최종 파괴 단계: Explode → Destroy(gameObject)
+IceCube는 Explode에서 Woodbox와 동일한 파괴 FX(BlockPang_WoodBox) 를 사용하고,
+마지막에 Destroy(this.gameObject)로 오브젝트가 제거됨.
 
-                                this.stage.RemoveBlock(cell);
-                                
-                                CommonProcessController.MuteEffectSound("Ingame", 20);
-                            }
-                            this.UpdateDashboard();
-                            // flag = true;
-                        }
-                    }
-                    
-                    this.isIdling = false;
-
-                    // 매칭 한 후
-                    NormalMatch match = new NormalMatch(this.stage);
-                    List<NormalMatchResult> results = match.AnalyseAll();
-
-                    // 일반매칭결과를 처리한다.
-                    if (null != results) {
-                        foreach (NormalMatchResult result in results) {
-                            Block specialBlock = this.AttackNormal(result);
-                            if (null != specialBlock) {
-                                // 생성 후 약간의 지연이 필요하다.
-                                await UniTask.Delay(TimeSpan.FromSeconds(0.2f));
-                                this.dirtyCount++;
-                            }
-                        }
-                        // 일반매칭 후 중력효과 발휘까지 대기 시간
-                        await UniTask.Delay(TimeSpan.FromSeconds(0.2f));
-                    }
-
-                    ////////// GRAVITING /////////
-
-                    // 중력효과를 반영한다.
-                    Dictionary<Block, List<Toss>> movements = Gravity.CalcMovements(this.stage);
-                    if (null != movements) {
-                        foreach (KeyValuePair<Block, List<Toss>> m in movements) {
-                            Block block = m.Key;
-                            List<Toss> tosses = m.Value;
-                            BlockController blockController;
-                            switch (tosses[0].type) {
-                                case TossType.Normal:
-                                case TossType.WrapIn:
-                                    blockController = this.FindBlockController(block);
-                                    if (null != blockController) {
-                                        block.state = BlockState.Floating;
-                                        blockController.coGravity = blockController.Gravity(tosses);
-                                    }
-                                    break;
-                                case TossType.Genesis:
-                                case TossType.WrapOut:
-                                    blockController = BlockController.Create(block, tosses[0].toRow, tosses[0].toCol, true);
-                                    if (null != blockController) {
-                                        block.state = BlockState.Floating;
-                                        blockController.coGravity = blockController.Gravity(tosses);
-                                    }
-                                    break;
-                            }
-                        }
-                    } else {
-                        // NOTE: 각 턴 효과가 발휘도고 난 후 마지막 위치가 된다.
-
-                        // 잔디가 있는 스테이지 이고, 지금 스테이지에서 잔디를 제거 못했다면,
-                        // 잔디 하나를 추가해준다.
-                        // 최초턴에는 늘리지 않는다. 시작이니까.
-                        if (this.stage.isWeeding && 0 == this.lastWeedsCount && 1 <= this.stage.turn) {
-                            Cell cell = this.stage.GetNewWeedsCell();
-                            if (null != cell) {
-                                cell.bottomBlock = Block.FactoryWeeds();
-                                BottomController.Create(cell.bottomBlock, cell.row, cell.col);
-                                // 역으로 늘어난다.
-                                if (this.stage.ClearCountdown(ClearType.Puddle, -1))
-                                    this.UpdateDashboard();
-                            }
-                            this.lastWeedsCount = 0;
-                        }
-
-                        // NOTE: 턴 하나가 끝나는 지점
-                        //Debug.Log("TURN OK");
-
-                        if(0 == BlockController.gravityCount)
-                            this.isIdling = true;
-
-                        // 스테이지가 클리어 되었으면 완료 스프라이트를 올려준다.
-                        if (this.isAutoplaying) {
-                            switch (this.stage.mode) {
-                                case Mode.TimeAttack:
-                                    // 타임어텍 모드
-                                    // if (this.stage.IsCleared)
-                                    //     if (null != this.delegateTimeout)
-                                    //         this.delegateTimeout(this);
-                                    break;
-                                default:
-                                    // 일반 모드 or 일반+플레이타임 모드
-                                    if (this.stage.IsCleared) {
-                                        if (null != this.delegateClearStage)
-                                            this.delegateClearStage(this);
-                                    } else {
-                                        if (null != this.delegateAutoplay)
-                                            this.delegateAutoplay(this);
-                                    }
-                                    break;
-                            }
-                        } else {
-                            switch (this.stage.mode) {
-                                case Mode.TimeAttack:
-                                    // 타임어텍 모드
-                                    // if (this.stage.IsCleared)
-                                    //     if (null != this.delegateTimeout)
-                                    //         this.delegateTimeout(this);
-                                    
-                                    // 힌트 처리한다.
-                                    // 힌트가 중력효과가 끝나고 나서부터 처리하도록 변경
-                                    if(isIdling)
-                                        this.ShowHintOrRefresh().Forget();
-                                    break;
-                                default:
-                                    if (this.stage.IsCleared) {
-                                        if (null != this.delegateClearStage)
-                                            this.delegateClearStage(this);
-                                    }
-                                    else
-                                    {
-                                        if(isIdling)
-                                            this.ShowHintOrRefresh().Forget();
-                                    }
-                                    break;
-                            }
-                        }
-                            //생성이 안된것이 있다면 생성시켜준다.
-                            foreach (KeyValuePair<string, Cell> item in srcCells) {
-                                Cell cell = item.Value;
-                                if (BlockAttr.Movable == cell.block.attr) {
-                                    Debug.Log("SHERIFF: CREATE BLOCK. UNIQKEY = " + item.Key);
-                                    BlockController.Create(cell.block, cell.row, cell.col);
-                                }
-                                // 움직여야 되는 속성이 있는 블럭이 고정되어 있다면 풀어준다.
-                                if (null != cell.block && BlockAttr.Movable != cell.block.attr && cell.block.IsMovable) {
-                                    Debug.Log("SHERIFF: MODITY ATTR.MOVABLE BLOCK. UNIQKEY = " + item.Key);
-                                    cell.block.attr = BlockAttr.Movable;
-                                }
-                            }
-                            srcCells = null;
-                        }
-                        // 턴 하나를 끝냈다.
-                        throw new OperationCanceledException();
-                    }
-
-                } finally {
-                    this.isGraviting = false;
-                }
-
-                // 중력효과가 완료될 때까지 대기
-                await UniTask.WaitUntil(() => 0 == BlockController.gravityCount);
-
-            } // for (;;)
-
-        } finally {
-            this.gravityStackCount--;
-            if (0 == this.gravityStackCount)
-                this.coMatchAndGravity = null;
-            this.delegateCheckResultModalNeed?.Invoke();
-        }
+```csharp
+public IEnumerator Explode(float duration = 0f) {
+  try {
+    switch (this.block.type) {
+      case BlockType.Woodbox:
+      case BlockType.IceCube:
+      case BlockType.TopiarySpring:
+      case BlockType.TopiaryWinter:
+      case BlockType.FloorLamp:
+        GameObject woodPrefab = IngameFxResource.Instance.GetPrefab(
+          IngameFxResource.PrefabType.BlockPang_WoodBox);
+        GameObject woodObj = Instantiate(woodPrefab);
+        woodObj.transform.position = transform.position;
+        break;
     }
-  </code>
-</pre>
+    yield return new WaitForSeconds(duration);
+  }
+  finally {
+    if (!this.IsDestroyed()) Destroy(this.gameObject);
+  }
+}
 
----
+```
 
-> 블록이 채워지기 위해 각각의 블록이 이동경로를 만드는 과정
-
-<pre>
-  <code>
-    public static Dictionary<Block, List<Toss>> CalcMovements(Stage s)
-    {
-        List<Snap> snaps = Gravity.CalcSnaps(s);
-        if (null != snaps) {
-            Dictionary&lt;Block, List&lt;Toss>> movements = new Dictionary&lt;Block, List&lt;Toss>>();
-            foreach (Snap snap in snaps) {
-                foreach (Toss toss in snap.tosses) {
-                    if (null == toss.block)
-                        Debug.Log("ERROR : toss가 널 입니다.");
-                    else {
-                        if (! movements.ContainsKey(toss.block))
-                            movements.Add(toss.block, new List<Toss>());
-                        movements[toss.block].Add(toss);
-                    }
-                }
-            }
-            return movements;
-        } else
-            return null;
-    }
-  </code>
-</pre>
+5) 전체 라이프사이클(요약 시퀀스)
+```text
+flowchart TD
+  1. [LoadStage(JObject)] --> B[InitStage: 셀 순회]
+  2. [BlockController.Create(IceCube)]
+  3. [게임 진행 중 매치 발생]
+  4. [AttackNormal 호출]
+  5. [AttackNormalSide로 주변 미션블록 피격]
+  6. [IceCube.normalSidePoint 감소]
+  7. [BlockController.Update: HP 변화 감지]
+  8. [Sprite 갱신: 7101-{HP}, 피격 FX]
+  9. {HP <= 0 ?}
+  -->|Yes| [BlockController.Explode: Woodbox]
+          [Destroy(gameObject)]
+```
