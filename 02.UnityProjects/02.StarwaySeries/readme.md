@@ -40,9 +40,9 @@ Sample Code
 > 교차 검증을 통한 Server-Client 인앱 구매 처리 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/IAPProcess.md)   
 > 추가 리소스 다운로드와 네트워크 불안정 환경 대응 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/AdditionalResourceDownload.md)   
 
-*UniTask를 활용한 퍼즐 로직 구현*
+*퍼즐 로직 구현*
 > 퍼즐 스테이지 최초 초기화 과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PuzzleInit.md)   
-> 일반 블록 제거 및 채우기 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md)   
+> 미션 블록 처리과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md)   
 > 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/CardSkillBlockLogic.md)   
 
 *패턴 설계*
