@@ -39,14 +39,19 @@ Sample Code
 *네트워크 처리 관련*
 > 교차 검증을 통한 Server-Client 인앱 구매 처리 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/IAPProcess.md)   
 > 추가 리소스 다운로드와 네트워크 불안정 환경 대응 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/AdditionalResourceDownload.md)   
+> 앱 최초 실행시 버전체크/공지/리소스서버 확인 등 부팅 시퀀스 설계 [코드 샘플 링크](<https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/05.Network/02. TitleSequence>)   
 
 *퍼즐 로직 구현*
 > 퍼즐 스테이지 최초 초기화 과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PuzzleInit.md)   
 > 미션 블록 처리과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md)   
 > 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/CardSkillBlockLogic.md)   
+> 오브젝트 풀링 및 Coroutine → UniTask 전환을 통한 인게임 최적화 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/100.Docs/01.%EC%B5%9C%EC%A0%81%ED%99%94/readme.md)   
 
 *패턴 설계*
 > MVC 패턴을 활용한 팝업 UI 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PopupUIPattern.md)   
 > 기획자 편의를 제공한 UniTask, Linq, Queue기반 튜토리얼 시스템 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/TutorialPattern.md)   
+
+*협업/버전 관리*
+> Git 브랜치 전략 및 서브모듈 전환 배경 [문서 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/06.GitBranchStrategy)   
 
 ***
