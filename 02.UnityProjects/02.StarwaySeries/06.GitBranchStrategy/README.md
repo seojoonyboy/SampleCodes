@@ -1,4 +1,7 @@
-## 설명
+## 배경
+STARWAY는 하나의 코어 코드베이스를 기반으로 김호중·장민호·강다니엘·에이티즈·권은비·아이콘까지 총 6개의 아티스트 IP 타이틀을 순차 런칭하는 구조였다. 각 타이틀(예: SWKHJ, SWKD)은 공통 로직은 대부분 동일하지만 디자인 리소스, 폰트, 일부 연출만 다른 "파생 프로젝트" 형태로 개발이 진행되었고, 이 과정에서 아래와 같은 브랜치 병합 제약이 실제로 발생했다.
+
+## 문제 상황
   - SWKHJ Branch가 Main Branch로 계속 합쳐지고 있다. 때문에 이후 파생 프로젝트(예: SWKD) Branch는 Main Branch로 Merge가 불가합니다. 
     더 자세히 설명하면, 파생 Branch의 디자인 리소스, 폰트 등이 Main Branch에 덮어씌워지기 때문 (이 부분에 대해서는 서브모듈로 전환을 검토중이고, 그 이전까지는...)
 
@@ -11,6 +14,8 @@
   3. SWKD의 내용을 SWKHJ 혹은 Main Branch로 Merge는 금지
   
   ![git_graph2](https://user-images.githubusercontent.com/110382516/187827024-ebe892ee-dfd5-4e42-a49e-a00abcbd38c4.PNG)
+
+이런 단방향 규칙은 실수를 막는 임시 방편일 뿐, 근본적인 해결책은 아니었다. 그래서 이후 공용 코어 로직(네트워크 통신 계층, 팝업/튜토리얼 등 공통 패턴, 퍼즐 코어 로직 등)을 Git Submodule로 분리해 6개 타이틀이 하나의 서브모듈을 참조하도록 구조를 전환했고, 이 리포지토리(`02.StarwaySeries`, `05.Network`, `99.Pattern` 등)에 있는 샘플 코드들이 바로 그 공용 코어에 해당한다. 서브모듈 전환 이후로는 코어 로직 수정이 6개 타이틀에 동시에 반영되고, 타이틀별 브랜치는 디자인/연출 차이만 관리하면 되었다.
   
 ## 환경
 
@@ -65,3 +70,7 @@ Observer 패턴
   - 들여쓰기 : space와 tab을 섞어서 사용하지 않는다. (tap = space * 4)
   - 명명 규칙 : 카멜 케이스
   - 전역 변수 : 앞에 this를 붙인다. (예 : this.mainTexture)
+
+## 관련 코드
+> 이 브랜치 전략 하에서 관리된 공용 네트워크/리소스 계층 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/AdditionalResourceDownload.md)   
+> 공용 패턴(Popup/Tutorial) 폴더 [폴더 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/99.Pattern)
