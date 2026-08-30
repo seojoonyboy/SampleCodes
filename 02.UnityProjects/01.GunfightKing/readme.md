@@ -20,9 +20,20 @@ GunfightKing Mobile FPS Game
 
 Sample Code
 ============================
+*Bot AI 아키텍쳐*
+> Bot AI 엄폐 지점(CoverPoint) 배치 및 관리 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/01.%20CoverPoint)   
+> Bot AI 이동 경로(WayPoint) 그래프 및 팀/개인전 분기 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/02.%20WayPoint)   
+> Bot AI 행동 패턴(FSM) 설계 - 탐색/공격/폭탄모드/회피 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/04.%20StateMachine)   
+> Bot AI 전체를 관리하는 매니저 (문서 미작성, 코드 참고용) [폴더 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/07.%20MasterClientBotManaging)   
+
+*전투/네트워크*
 > 무기별 탄퍼짐 로직 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/06.%20BulletSpread)   
+> Photon PUN2 기반 Bot 위치/상태 압축 동기화 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/05.%20PhotonNetwork)   
+
+*싱글플레이 콘텐츠*
+> 연습모드 / 폭탄해체 트레이닝 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/03.%20Practice)   
+> UniTask 기반 튜토리얼 태스크 큐 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/03.%20Tutorial)   
+
+*라이브 서비스 안정화/보안*
 > 해킹방지를 위한 코드 난독화 작업 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/08.%20Obfuscator)   
 > Firebase Crashlytics를 연계한 라이브 서비스 모니터링 및 안정화 작업 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/09.%20Firebase)   
-> Bot AI 아키텍쳐 설계 - [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/01.%20CoverPoint)   
-> Bot AI 행동 패턴 설계 - 이동/공격/탐색 등 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/04.%20StateMachine)   
-> Photon P2P 통신 동기화 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/05.%20PhotonNetwork)   
