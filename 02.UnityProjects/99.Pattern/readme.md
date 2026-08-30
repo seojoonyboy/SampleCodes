@@ -1,12 +1,17 @@
 개방 폐쇄원칙(Open-Closed Pricipal)에 입각한 팝업창 설계
 ================
 
+STARWAY는 확인/취소, 재화 부족, 보상, 구매 등 실제로 50종이 넘는 팝업 프리팹을 운영한다. 새 팝업이
+추가될 때마다 팝업을 여닫는 로더 코드나 다른 팝업의 구현까지 함께 손대야 한다면 개방-폐쇄 원칙을
+지킬 수 없다. 그래서 팝업의 "생성·등록·공통 동작"은 `Popup` 한 클래스에 고정해두고(폐쇄), 새 팝업은
+`Popup`을 상속받는 새 클래스와 프리팹 하나만 추가하면 기존 코드를 전혀 건드리지 않고 붙는(확장에
+열려있는) 구조로 설계했다.
+
 모든 팝업은 Popup 클래스를 상속받아 설계   
 ![Popup](https://github.com/user-attachments/assets/0b8bb013-63eb-402c-ae1d-b25aa1d25509)   
 
 내부 함수는 Virtual 함수로 작성하여, 공통 기본 동작을 기술   
-<pre>
-  <code>
+```csharp
     public virtual void OnOpen()
     {
         GoodsView.Instance.MailBox.SetActive(false);
@@ -168,8 +173,59 @@
         }
         
     }
-  </code>
-</pre>
+```
+
+새 팝업을 만들 때 실제로 손대는 곳은 `Popup.Load`를 호출하는 쪽과 새 팝업 클래스뿐이다. 로더 자체는
+아래처럼 프리팹 이름 문자열 하나로 어떤 팝업이든 동일한 절차(로드 → 인스턴스화 → PopupRoot 등록 →
+Open/OnOpen 호출)로 띄운다 — 팝업 종류가 50개든 100개든 이 함수는 수정되지 않는다.
+
+```csharp
+    public static Popup Load(string popupName, Params parms, OnResultCallback callback = null, OnLoadedCallback loadedCallback = null, bool isGoodsViewHide = true)
+    {
+        if (PopupRoot.Instance == null)
+        {
+            return null;
+        }
+
+        string path = basePath + popupName;
+        Popup prefab = Resources.Load<Popup>(path);
+        if (prefab == null)
+        {
+            return null;
+        }
+
+        GameObject instance = (GameObject)GameObject.Instantiate(prefab.gameObject, PopupRoot.Instance.popupInstantiateRoot, true);
+        RectTransform rect = instance.GetComponent<RectTransform>();
+
+        instance.transform.localPosition = Vector3.zero;
+
+        rect.anchorMin = new Vector2(0, 0);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.offsetMin = new Vector2(0, 0);
+        rect.offsetMax = new Vector2(0, 0);
+
+        Popup popup = instance.GetComponent<Popup>();
+        if (popup == null)
+        {
+            GameObject.Destroy(instance);
+            UnityEngine.Object.Destroy(prefab);
+        }
+
+        PopupRoot.Instance.cam.enabled = true;
+
+        PopupRoot.Instance.AddPopup(popup);
+        popup.Open(parms, callback, loadedCallback);
+        popup.OnOpen();
+        PopupRoot.Instance.RefreshGoodsView();
+        
+        return popup;
+    }
+```
+
+> `popupName` 문자열로 `Resources.Load<Popup>(basePath + popupName)`을 호출하는 부분이 개방-폐쇄
+> 원칙의 실질적인 근거다. 새 팝업은 `Prefabs/Popup/` 아래에 프리팹을 하나 추가하고 `Popup`을 상속한
+> 클래스를 하나 작성하면 끝이다. `Popup.Load`, `PopupRoot`, 그 밖의 기존 팝업 코드는 새 팝업이
+> 추가되어도 재컴파일 대상이 아니다 — 확장은 새 파일을 더하는 것으로 끝나고, 기존 코드는 닫혀 있다.
 
 MVC 패턴   
 ================
@@ -187,8 +243,7 @@ STARWAY MVC Pattern 설계 예시
 > 패스 구매 팝업(PassBuyPopup)을 띄웁니다.   
 > PassBuyPopup.Params를 통해 패스 구매 팝업에 필요한 IAP 상품의 SKU 값과 기타 필요한 정보를 함께 전달합니다.   
 
-<pre>
-  <code>
+```csharp
     public void OnClickToBuyPremiumPass()
     {
         var item = GameStorage.StoreStorage.RecommendStoreDisplayList.Find(x => x.GoodsType == 2);
@@ -233,8 +288,12 @@ STARWAY MVC Pattern 설계 예시
         // this.ReOpenPopup();
         //end test code
     }
-  </code>
-</pre>
+```
+
+> `PassBuyPopup.Params`에 담기는 값들을 보면 View(팝업)가 자기 힘으로 알아낼 수 없는 정보 — 상품
+> 데이터(`item`), 서버 시간을 얻는 함수(`timeFunc`), 가격 문자열, 이미 활성화되어 있는지 여부 —
+> 를 호출부(Controller 역할)가 전부 계산해서 넘겨준다는 것을 알 수 있다. 팝업 자신은 "이 값들을
+> 어떻게 화면에 그릴지"만 책임지고, "이 값이 무엇인지"는 몰라도 된다.
 
 패스 구매 팝업에서 구매하기 버튼 클릭시   
 > OnClickBuy 함수가 호출됩니다.   
@@ -246,8 +305,7 @@ STARWAY MVC Pattern 설계 예시
 > 최종적으로 플레이어 패스 정보에 대한 갱신을 합니다.   
 > View -> Model   
 
-<pre>
-  <code>
+```csharp
     public void OnClickBuy()
     {
         Params param = (Params)this.paramBuffer;
@@ -347,6 +405,20 @@ STARWAY MVC Pattern 설계 예시
             });
         });
     }
-  </code>
-</pre>
+```
+
+> `result.ResponseCode`(스토어 결제 성공 여부)와 `result.AckResponseCode`(서버 재확인 성공 여부)를
+> 분리해서 검사하는 것이 View -> Model 갱신의 전제 조건이다. 두 값이 모두 `OK`일 때만
+> `PlayerStorage`/`EventStorage`의 패스 프리미엄 상태(`isPremium`)를 갱신한다 — 구매 자체는
+> 성공했더라도 서버 재확인 전에는 로컬 모델을 앞서서 바꾸지 않는다.
+
+설계 포인트
+------------
+> 이 문서의 두 코드 블록은 서로 다른 층위의 개방-폐쇄 원칙을 보여준다. 첫 번째(`Popup`/`Popup.Load`)는
+> "팝업을 어떻게 만들고 띄우는가"라는 인프라 층위의 확장성이고, 두 번째(`PassBuyPopup`의 MVC 흐름)는
+> "하나의 팝업 안에서 View·Controller·Model이 어떻게 역할을 나누는가"라는 개별 기능 층위의 확장성이다.
+> 새 구매 상품을 추가할 때 View(`PassBuyPopup`)나 Model(`PlayerStorage`) 구조를 바꿀 필요 없이
+> `OnClickToBuyPremiumPass` 같은 호출부에서 `Params` 값만 다르게 채우면 되는 것도 같은 원리의 연장이다.
+
+관련 코드: [PopupUIPattern.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PopupUIPattern.md) · [IAPProcess.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/IAPProcess.md) · [01.Pass](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/01.Pass)
 
