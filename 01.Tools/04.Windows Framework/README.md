@@ -78,9 +78,7 @@ flowchart LR
 
 ## 설계 포인트
 
-### 1. 템플릿 메서드로 컨트롤 두 종류를 하나의 구현에 태우기
-
-9×9 스테이지 셀(`StageCell`)과 Random Fill 팔레트 슬롯(`PoolSlot`)은 "클릭하면 블록 썸네일 드롭다운이 뜨고, 고르면 이미지가 박힌다"는 동작이 완전히 동일합니다. 다른 것은 셀이 자신을 어떻게 설명하는지(툴팁 텍스트) 뿐입니다. 이 공통 동작을 `abstract class BlockPickerCell : Border`로 뽑아내고, 달라지는 지점만 `protected virtual`로 열어 하위 클래스가 오버라이드하도록 했습니다.
+### 1. 템플릿 메서드 활용
 
 ```csharp
 // Controls/BlockPickerCell.cs
@@ -116,25 +114,9 @@ public sealed class PoolSlot : BlockPickerCell
 }
 ```
 
-새 종류의 "선택 가능한 셀"이 추가되어도 드롭다운/캐싱/이벤트 배관을 다시 만들 필요가 없습니다.
-
-### 2. Lazy 캐싱으로 반복 파일 I/O 제거
-
-블록 카탈로그(`Blocks/` 폴더 스캔)와 레포 루트 경로 탐색은 매 프레임 반복할 필요가 없는 연산입니다. `Lazy<T>`로 최초 1회만 계산하고 이후 모든 셀·슬롯이 같은 인스턴스를 참조하게 했습니다.
-
-```csharp
-// Services/BlockCatalog.cs
-public static class BlockCatalog
-{
-    private static readonly Lazy<IReadOnlyList<BlockDefinition>> AllLazy = new(Load);
-    public static IReadOnlyList<BlockDefinition> All => AllLazy.Value;
-    ...
-}
-```
-
 썸네일 비트맵 역시 `BlockPickerCell` 내부의 정적 `Dictionary<string, BitmapImage>`에 캐싱해, 같은 블록이 그리드 곳곳에서 선택될 때마다 디코딩을 반복하지 않도록 했습니다.
 
-### 3. 도메인 모델(UI)과 Export DTO를 분리
+### 2. 도메인 모델(UI)과 Export DTO를 분리
 
 `StageCell`이 들고 있는 `SelectedBlock`(런타임 UI 상태)과 `Stages/*.json`에 쓰이는 `CellExport`(파일 포맷)는 의도적으로 다른 타입입니다. UI 상태가 파일 포맷에 종속되면, 나중에 파일 스키마가 바뀔 때 컨트롤 코드까지 건드려야 하기 때문입니다. 변환은 `StageExportService` 한 곳에서만 일어납니다.
 
@@ -153,27 +135,7 @@ public static StageExportModel BuildExportModel(
 }
 ```
 
-### 4. 커스텀 `JsonConverter`로 레거시 포맷 무결성 유지
-
-기존에 게임 클라이언트가 쓰던 `Stages/*.json`은 `cells` 배열의 각 원소가 한 줄로 압축된 JSON(`{"block":{"type":"101"}}`)인 반면, 문서 전체는 들여쓰기가 적용돼 있는 혼합 포맷입니다. `System.Text.Json`의 기본 직렬화는 문서 전체를 균일하게 들여쓰거나 균일하게 압축할 수밖에 없어서, `CellExport` 하나만 예외적으로 컴팩트하게 쓰는 `JsonConverter<CellExport>`를 직접 구현해 끼워 넣었습니다. 새 도구가 만든 파일이 기존 파일들과 diff 노이즈 없이 섞일 수 있도록 하기 위한 선택입니다.
-
-```csharp
-// Services/CellExportJsonConverter.cs
-public override void Write(Utf8JsonWriter writer, CellExport value, JsonSerializerOptions options)
-{
-    var json = JsonSerializer.Serialize(value, CompactOptions);
-
-    // WriteRawValue는 자동 들여쓰기에 관여하지 않으므로, 줄바꿈+들여쓰기를 직접 맞춰준다.
-    if (writer.Options.Indented)
-    {
-        var indent = new string(' ', 2 * writer.CurrentDepth);
-        json = "\n" + indent + json;
-    }
-    writer.WriteRawValue(json, skipInputValidation: true);
-}
-```
-
-### 5. 이벤트 기반 통신으로 컨트롤 ↔ 윈도우 결합도 낮추기
+### 3. 이벤트 기반 통신으로 컨트롤 ↔ 윈도우 결합도 낮추기
 
 `BlockPickerCell`은 `MainWindow`의 존재를 전혀 모릅니다. 선택이 바뀌면 `SelectedBlockChanged` 이벤트만 올리고, `MainWindow`가 필요한 셀에만 구독해 상태바를 갱신합니다. 컨트롤을 다른 창/도구에 재사용하더라도 코드 변경이 필요 없습니다.
 
@@ -183,7 +145,7 @@ var cell = new StageCell(row, col);
 cell.SelectedBlockChanged += Cell_SelectedBlockChanged;
 ```
 
-## Export 포맷
+## Export 기능
 
 `Stages/*.json`은 실제 게임 클라이언트가 로드하는 포맷이며, `Header`/`Cells`만 이 툴에서 실질적으로 채워지고 나머지(`Clears`/`Components`/`Genesises`/`Zones`)는 기존 파일과 구조를 맞추기 위한 자리표시자로 남겨뒀습니다([StageExportModel.cs](src/StageMaker/Models/StageExportModel.cs) 주석 참고).
 
@@ -202,12 +164,7 @@ cell.SelectedBlockChanged += Cell_SelectedBlockChanged;
 ```powershell
 dotnet build StageMaker.sln
 dotnet run --project src/StageMaker/StageMaker.csproj
+또는 exe 파일을 통한 실행
 ```
 
 레포 루트의 `Blocks/`, `Stages/` 폴더를 자동으로 찾아 사용합니다([ProjectPaths.cs](src/StageMaker/Services/ProjectPaths.cs)) — 빌드 출력 위치와 무관하게 항상 같은 폴더를 읽고 씁니다.
-
-## 남은 과제
-
-- `clears` / `components` / `genesises` / `zones` 섹션을 UI에서 편집 가능하게 확장
-- 블록 `Id`(이미지 파일명)를 실제 게임 타입 코드로 매핑하는 테이블 도입
-- 기존 스테이지 파일 Import(현재는 Export만 지원)
