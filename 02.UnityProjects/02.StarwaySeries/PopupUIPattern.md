@@ -719,4 +719,15 @@ public class PassBuyPopup : Popup
 > 담아 넘기면 된다. 구매 결과를 서버에 재확인하는 `Ack` 절차 자체의 신뢰성 설계는 서버-클라이언트 구매
 > 검증을 다루는 문서에서 별도로 설명한다.
 
-관련 코드: [99.Pattern](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/99.Pattern) · [IAPProcess.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/IAPProcess.md) · [01.Pass](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/01.Pass)
+*팝업과 View 이벤트 계층의 관계*
+> `Popup` 은 `public class Popup : View` 로 선언되어 있어서, 화면(Scene)이 쓰는 이벤트 인프라(`View.BindEvent / DoEvent / RemoveEvent`)를 그대로 물려받는다.
+> 다만 팝업은 "닫히면서 결과를 한 번 돌려주는" 수명이 짧은 화면이라, 사용자의 선택은 `BindEvent` 로 계속 구독하는 대신 위에서 본 `OnResultCallback` 델리게이트로
+> 전달한다. 흐름은 다음과 같이 두 갈래다.
+> ```
+> 화면(Scene) : Button.OnClick → View.OnXxx(go)  → DoEvent(EVENT.Xxx)      → Scene.BindMainViewEvents() 에서 처리   (오래 사는 화면 · 다수 이벤트)
+> 팝업(Popup) : Button.OnClick → OnTriggerOk/X()  → Close() → ResultCallback → 호출자(Controller)에서 처리         (짧게 사는 화면 · 결과 1회)
+> ```
+> 두 경로 모두 "버튼이 눌렸다"는 Unity 이벤트를 바로 로직에 연결하지 않고 한 번 도메인 의미로 바꿔서 위로 올린다는 점이 같다. 화면 쪽 이벤트 계층
+> (Adapter → Observer → 버블링 → Mediator)은 [100.Docs/02.설계패턴](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/100.Docs/02.%EC%84%A4%EA%B3%84%ED%8C%A8%ED%84%B4)에서 정리했다.
+
+관련 코드: [99.Pattern](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/99.Pattern) · [IAPProcess.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/IAPProcess.md) · [01.Pass](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/01.Pass) · [100.Docs/02.설계패턴](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/100.Docs/02.%EC%84%A4%EA%B3%84%ED%8C%A8%ED%84%B4)

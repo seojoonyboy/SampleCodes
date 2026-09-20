@@ -81,6 +81,4 @@ Sprite Packer를 통한 Texture 그룹별 압축
 ![image](https://github.com/user-attachments/assets/c4c346aa-a750-44ff-963c-c65a08f61f8f)
 
 
-Memory Profiler와 
-
 관련 코드: [BlockMatchLogic.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md) · [07.BlockControl 폴더](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/07.BlockControl)
