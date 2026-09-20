@@ -1,8 +1,12 @@
-카드마다 서로 다른 특수 효과(로켓, 폭탄, 미러볼, 종이비행기 등 특수 블록 생성형 스킬)를 갖고 있지만,
-스킬마다 "발동 트리거가 다르고(수동 클릭 / 스코어 모드 자동 발동 / 이어하기 보상 등)" "적용 대상 셀도
-다르다"는 문제가 있다. 스킬 종류가 늘어날 때마다 발동 로직을 새로 짜지 않도록, **일반 블록 셀 탐색 →
-기존 블록 폭파 → 신규 특수 블록 생성/이펙트**라는 하나의 공통 파이프라인 위에 여러 종류의 카드 스킬을
-얹는 구조로 되어 있다.
+카드 스킬 블록 — 발동 트리거가 달라도 하나의 파이프라인으로
+=======================================================
+> STARWAY 의 카드는 카드마다 고유한 스킬을 갖는다. 스킬을 쓰면 판 위의 일반 블록 하나가 **카드 스킬 블록(또는 로켓·폭탄 같은 특수 블록)으로 바뀌고**, 그 블록을 터치하면 스킬 효과가 터진다.
+> 그런데 스킬은 **발동 트리거가 다르고**(수동 클릭 / 스코어 모드 자동 발동 / 이어하기 보상 / 부스터 아이템) **적용 대상 셀도 다르다.**
+> 스킬 종류가 늘어날 때마다 로직을 새로 짜지 않도록, **일반 블록 셀 탐색 → 기존 블록 폭파 → 신규 특수 블록 생성/이펙트**라는 하나의 공통 골격 위에 여러 스킬을 얹는 구조로 되어 있다.
+>
+> 스킬의 흐름은 두 단계로 나뉜다. **① 스킬 블록 배치**(이 문서의 `CardSkillController`) → **② 스킬 블록 발동**(터치했을 때 `StageController` 가 `CardSkillMatch.Analyse3` 로 대상 셀을 구해 터뜨린다, 문서 하단 참고).
+
+샘플 코드: [`04.CardSkill/CardSkillController.cs`](./04.CardSkill/CardSkillController.cs)
 
 ![image](https://github.com/user-attachments/assets/9b09ca53-a03e-4db9-adae-ad3b7e41f85e)
 
@@ -84,15 +88,20 @@
     }
 ```
 
+> 위 세 진입점 중 **카드 발사 이펙트 정보를 함께 넘기는 것은 첫 번째(전체 인자) 오버로드뿐**이다. 나머지 두 개(`OnClickCardSkill(int)`, `OnClickCardSkillForAutoplay`)는 `args.tf`, `args.tailPrefab`,
+> `args.glowPrefab` 을 채우지 않은 채 `args != null` 로 넘기므로, 이 파일 기준으로는 `SetCardSkillBlock` 의 `args.tf.gameObject` 에서 `NullReferenceException` 이 날 수 있는 형태다.
+> 호출부가 샘플에 없어 두 경로가 실제로 쓰였는지는 확인하지 못했다(아래 "한계와 개선 방향").
+> 또한 진입점마다 `Analyse()` 로 `CardSkillMatchResult` 를 구하지만, `SetCardSkillBlock` 은 이 결과(`args.match`)를 쓰지 않고 `getNormalCells()` 에서 무작위로 셀을 고른다.
+>
 > 코드 곳곳에 남아있는 `// NOTE: 카드스킬은 턴을 소모하지 않는다` 주석은 실제 기획 규칙을 그대로 코드
 > 옆에 남겨둔 흔적이다 — 카드 스킬은 퍼즐의 "턴"을 소모하는 일반 조작과는 다른 규칙을 갖고 있음을
 > 구현 단계에서부터 명시하고 있다.
 
 *발동 이후 공통 처리 — 셀 폭파와 특수 블록 생성*
-> 세 진입점이 모두 도착하는 `SetCardSkillBlock`은 대상 셀을 무작위로 하나 뽑아 기존 블록을 터뜨리고,
-> `Block.FactorySpecial(type)`으로 새 특수 블록을 만들어 그 자리에 채워 넣는다. `args`가 있을 때만(즉
-> 실제 카드 스킬 발동일 때만) 카드에서 셀까지 날아가는 꼬리 이펙트를 먼저 재생하고, 이펙트 이동이 끝난
-> 뒤에 블록을 교체한다는 순서가 중요하다.
+> `SetCardSkillBlock`은 대상 셀을 무작위로 하나 뽑아 기존 블록을 터뜨리고,
+> `Block.FactorySpecial(type)`으로 새 특수 블록을 만들어 그 자리에 채워 넣는다. `args`가 있으면 카드에서 셀까지 날아가는
+> 꼬리 이펙트를 먼저 재생하고, 이펙트 이동이 끝난 뒤에 블록을 교체한다는 순서가 중요하다(**연출이 끝난 뒤 데이터를 바꾼다**).
+> `args == null` 로 호출되는 경로는 테스트 버튼(`OnClickTEST`)뿐이고, 이 경우 이펙트와 카드 등급 정보 없이 블록만 교체한다.
 
 ```csharp
     private IEnumerator SetCardSkillBlock(BlockType type, AttackCardSkillArgs args)
@@ -222,6 +231,8 @@
     }
 ```
 
+> 이 함수(`TailEffectTask`)는 **이 파일 안에서는 호출되지 않는다.** 여러 셀을 동시에 타격하는 스킬을 위한 fan-out/join 코드로 남아있는 것이고, 현재 배치 경로(`SetCardSkillBlock`)는 셀 하나에만 이펙트를 보낸다.
+>
 > 콜백이 올 때마다 인덱스별 `bool`을 켜고, 매 프레임 "아직 안 끝난 항목이 있는지"를 검사하는 방식으로
 > 사실상의 fan-out/join을 코루틴만으로 구현했다. `System.Random`을 필드로 하나 두고 재사용하는 것도
 > (`private System.Random Random = new System.Random();`) 호출마다 새로 생성하지 않기 위한 선택이다.
@@ -294,9 +305,34 @@
     }
 ```
 
+> 위 발췌의 `case 2` 에는 **버그가 있다.** `tmpIndex` 로 뽑은 셀을 지우면서(`RemoveAt(tmpIndex)`) 정작 `cells[1]` 에는 `Random.Next(...)` 를 한 번 더 호출한 값을 넣는다.
+> 그래서 지운 셀과 실제로 쓰는 셀이 달라, 같은 셀이 두 번 선택될 수 있다(생략한 `case 3` 의 미러볼 배정도 같은 형태다). 후보 셀이 3개 미만일 때는 `case 3` 에서 빈 리스트를 인덱싱할 수도 있다.
+> `cells[i] = normalCells[tmpIndex]` 로 통일하고 후보 수를 검사하는 것이 맞다.
+>
 > `retryCount`(이어하기 재시도 횟수)가 높을수록 보상으로 지급되는 특수 블록 종류가 늘어나는 것을 볼 수
 > 있다(1회차: 턴만 추가, 2회차: 로켓 1개 추가, 3회차: 종이비행기/폭탄/미러볼 3종 추가) — 재시도를 여러
 > 번 할수록 다음 시도가 더 유리해지도록 보상 곡선이 설계되어 있다.
+
+*② 배치된 스킬 블록이 터지는 곳 — `StageController` (참고)*
+> 스킬 블록을 터치하면 `StageController` 의 특수 블록 처리 분기(`case BlockType.CardSkill`)가 실행된다. 여기서 `CardSkillMatch.Analyse3(me)` 로 **스킬이 영향을 줄 셀 목록**을 구하고,
+> 제거 직전 깜빡임 이펙트(0.8초) → 카드 사용 이벤트 방송(`"com.snowballs.UseSkillCard"`, 카드가 회색으로 바뀌는 UI 갱신용) → 셀별 폭발 이펙트 → 블록 제거 순서로 진행한다.
+
+```csharp
+case BlockType.CardSkill: {
+    CardSkillMatch match2 = new CardSkillMatch(this.stage, excludedBlocks);
+    CardSkillMatchResult result2 = match2.Analyse3(me);       // 영향 셀 목록
+    _AttackBottomBlock(me);
+    _AddLock(result2.cells);                                   // 처리 중인 셀 잠금
+    _beginLock();
+    try {
+        // 제거 직전 깜빡이 효과 → await UniTask.Delay(0.8초)
+        BroadcastTunnel<string, int>.Notify("com.snowballs.UseSkillCard", me.block.skillCardIndex.Value);
+        // 셀별 폭발 이펙트, 스킬 블록 제거 ...
+    } finally { _UnlockAll(); }
+}
+```
+> 즉 **"어디에 스킬 블록을 놓을지"(`CardSkillController`)와 "스킬이 어떤 셀을 터뜨리는지"(`CardSkillMatch` + `StageController`)가 분리**되어 있다. 카드 스킬 종류를 늘리는 작업은 대부분 후자(대상 셀 계산)에서 일어나고,
+> 이 문서의 배치 파이프라인은 그대로 재사용된다. (`Analyse3` 의 내부는 이 샘플 범위에 포함하지 않았다.)
 
 설계 포인트
 ------------
@@ -310,4 +346,19 @@
 > 같은 코루틴에 흘려보낸다. 즉 "무엇이 스킬을 트리거했는가"와 "스킬 발동 결과를 어떻게 반영하는가"를
 > 분리해, 새로운 발동 조건(예: 신규 모드)이 추가돼도 결과 처리 로직은 그대로 재사용할 수 있다.
 
-관련 코드: [BlockMatchLogic.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md) · [07.BlockControl](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/07.BlockControl)
+---
+
+한계와 개선 방향
+------------------
+> * **같은 골격이 세 번 복사되어 있다.** `SetCardSkillBlock`, `SetBoosterItem`, `SetContinueItem` 이 "셀 선택 → `Explode` → `FactorySpecial` → `AddBlock`" 을 각자 구현한다. `args`(이펙트/카드 정보)를 옵션으로 받는
+>   하나의 `ReplaceBlock(cell, type, options)` 로 합칠 수 있다.
+> * **`OnClickContinue` 의 셀 배정 버그.** `case 2`/`case 3`(미러볼)에서 `RemoveAt(tmpIndex)` 와 실제 사용 셀의 인덱스가 다르다. 후보 셀이 적을 때는 빈 리스트 접근도 가능하다(위 본문 참고).
+> * **사용하지 않는 코드가 남아있다.** `TailEffectTask` 는 호출부가 없다. `Analyse()` 결과(`args.match`)도 배치 경로에서는 쓰이지 않는다. 또한 `OnClickBoosterItem`, `OnClickCardSkill` 안에는
+>   "TODO: 사용한 아이템/카드스킬 소모 처리" 주석이 남아있어, 소모 처리를 호출부에서 하는지 이 클래스에서 해야 하는지 코드만으로는 알 수 없다.
+> * **`args` 를 부분적으로만 채운 진입점이 있다.** 1인자 `OnClickCardSkill` 과 `OnClickCardSkillForAutoplay` 는 `args.tf` 등을 채우지 않는 채로 `args != null` 로 넘긴다. 호출부가 있다면
+>   `NullReferenceException` 위험이 있고, 없다면 삭제 대상이다. 옵션 객체를 `null` 대신 "이펙트 없음" 값 객체로 표현하면 이 종류의 실수를 막을 수 있다.
+> * **`Random`, `Resources.Load("Prefabs/Game/Scene/Ingame/Effect")`, `Instantiate` 가 함수 안에서 직접 호출된다.** 이펙트는 이미 오브젝트 풀링 구조가 있는 게임이므로 풀을 통해 재사용하는 것이 맞고,
+>   난수는 주입 가능하게 만들어야 셀 선택 로직을 테스트할 수 있다.
+> * **대기 코드가 비효율적이다.** `TailEffectTask` 는 매 프레임 `finishedList.ToList().Exists(...)` 로 리스트를 새로 만들고, 루프가 끝난 뒤 불필요한 `WaitUntil` 을 한 번 더 건다. 완료 카운터(`int remaining`)로 충분하다.
+
+관련 문서: [BlockMatchLogic.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md) · [07.BlockControl](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/07.BlockControl) (블록 재배치·힌트) · [PuzzleInit.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PuzzleInit.md)

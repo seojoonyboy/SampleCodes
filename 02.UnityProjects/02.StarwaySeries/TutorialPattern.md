@@ -8,7 +8,7 @@ LINQ로 그 행들을 순서대로 소비하기만 하는 구조로 분리했다
 
 *튜토리얼 테이블에 대한 Class*
 > 한 행이 튜토리얼 한 스텝에 대응한다. `TargetObject`(하이라이트할 UI), `TutorialText`(대사),
-> `NextTutorial`(다음 스텝), `TutorialSkip`(스킵 가능 여부), `LimitTime`/`RhythmIngameTime`(대기 시간)
+> `NextTutorial`(다음 스텝을 가리키는 컬럼이지만 엔진은 쓰지 않는다. 아래 "한계" 참고), `TutorialSkip`(스킵 가능 여부), `LimitTime`/`RhythmIngameTime`(대기 시간)
 > 처럼 연출에 필요한 값이 모두 컬럼으로 노출되어 있다. 각 `GetXXXBy...` 메서드는 이 행이 들고 있는
 > 코드값을 다른 데이터 시트(`TutorialType`, `TutorialLocale`, `ArtistVoice`, `ItemBox`, `Target` 등)의
 > 실제 레코드로 해석해주는 관계형 조회 역할을 한다 — 즉 튜토리얼 한 스텝의 정의가 여러 시트에 걸친
@@ -199,8 +199,8 @@ namespace Snowballs.Sheets.Data
 ```
 
 *스텝을 순서대로 소비하는 메인 루프*
-> `Run`은 `TutorialCommon` 리스트를 `foreach`로 순회하며 한 스텝씩 처리하는, 사실상 큐를 순차
-> 소비하는 async 루프다. 팝업이 떠 있으면 튜토리얼을 미루고(`UniTask.WaitUntil`), 일반 UI 튜토리얼은
+> `Run`은 `TutorialCommon` 리스트를 `foreach`로 순회하며 한 스텝씩 처리하는, 순서가 정해진 리스트를 처음부터
+> 끝까지 소비하는 async 루프다(`Queue` 자료구조는 쓰지 않는다). 팝업이 떠 있으면 튜토리얼을 미루고(`UniTask.WaitUntil`), 일반 UI 튜토리얼은
 > `WaitClick`(화면 터치 대기)으로, 리듬 인게임 튜토리얼은 `WaitSeconds`(정해진 시간만큼 대기)로 각
 > 스텝의 "다음으로 넘어가는 조건"을 분기한다. `_tutorialCancellationToken`을 통한 취소는 코루틴의
 > `yield break` 대신 `OperationCanceledException`을 던지고 받는 `try/catch`로 처리되어 있다 —
@@ -293,13 +293,32 @@ namespace Snowballs.Sheets.Data
 
 설계 포인트
 ------------
-> 튜토리얼 스텝의 "정의"(대사, 대상 오브젝트, 대기 시간, 다음 스텝)는 전부 `TutorialCommon` 시트에,
+> 튜토리얼 스텝의 "정의"(대사, 대상 오브젝트, 대기 시간)는 전부 `TutorialCommon` 시트에,
 > "진행 방식"(터치를 기다릴지 시간을 기다릴지, 팝업이 떠 있으면 미룰지)은 `TutorialManager`의 `Run`
 > 하나에 모여 있다. 이 분리 덕분에 기획자는 시트에 행을 추가/재배열하는 것만으로 새 튜토리얼 시퀀스를
 > 만들 수 있고, 엔지니어는 `Run`의 분기(`isRhythmIngame`)만 관리하면 된다 — 실행 순서를 배열이나
 > switch-case로 하드코딩하지 않고 `Where + OrderBy` LINQ 질의 결과에 그대로 위임한 것이 핵심이다.   
 > 진입점이 `PlayTutorial`(시청 기록 체크 있음) / `PlayRhythmIngameTutorial`(체크 없음, 인게임 전용)로
-> 나뉘어 있지만, 두 경로 모두 결국 같은 `Run()` 코루틴/async 루프로 합류하는 것도 같은 원칙의 연장이다
+> 나뉘어 있지만, 두 경로 모두 결국 같은 `Run()` async 루프로 합류하는 것도 같은 원칙의 연장이다
 > — 진입 조건이 다르더라도 "스텝을 순서대로 소비한다"는 실행 로직 자체는 하나로 유지된다.
 
 관련 코드: [99.Pattern](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/99.Pattern) · [09.Tutorial](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/09.Tutorial) · [PopupUIPattern.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PopupUIPattern.md)
+
+---
+
+한계와 개선 방향
+------------------
+> * **`Run` 이 `OperationCanceledException` 만 잡는다.** 스텝 처리 중 다른 예외가 나면(시트 행 누락, `GetContentLinkComponent` 의 `GameObject.Find(...).GetComponent<...>()` 대상 부재 등) `Run(...).Forget()` 은 예외를 로그로만 남기고 끝나므로, `isPlayingTutorial` 이 `true` 로 남고 마스크 캔버스와 뒤로가기 잠금이 풀리지 않을 수 있어 보인다.
+>   루프 전체를 `try/catch/finally` 로 감싸 `CloseTutorial()` 을 항상 호출하게 하는 편이 안전하다.
+> * **시청 기록을 튜토리얼이 끝나기 전에 저장한다.** `PlayTutorial` 은 `Run(...).Forget()` 직후에 `recordDict[tutorialType] = true` 를 기록하고 파일에 쓴다. 재생 도중 앱이 종료되면 다시 나오지 않고, `TutorialType` 에 해당하는 행이 하나도 없어서 `GetTutorialCommonDict` 가 빈 리스트를 돌려줘도 경고 없이 "본 것"으로 남는다.
+>   `onFinished` 시점에 기록하고, 빈 세트는 오류 로그로 드러내는 방식이 낫다.
+> * **재생 중에 들어온 `PlayTutorial` 요청을 조용히 버린다.** `isPlayingTutorial` 이 `true` 이면 `onStarted` / `onFinished` 를 부르지 않고 `return` 하므로, 콜백으로 다음 진행을 이어가는 호출부가 있다면 멈출 수 있어 보인다.
+>   요청을 `Queue<int>` 에 쌓아 순서대로 재생하거나, 최소한 재생 여부를 `bool` 로 돌려주는 편이 명확하다.
+> * **"시트가 정의한다"고 설명한 컬럼 중 엔진이 쓰지 않는 것이 있다.** 업로드된 클라이언트 코드 기준으로 `TutorialManager` 는 `TutorialType` 필터와 `Code` 정렬로만 순서를 정하고, `NextTutorial` · `TutorialReward` · `TutorialRewardBundleCode` · `TutorialPopupResource` · `TUTOPopup` · `TUTOType` 은 참조하지 않는다.
+>   실제 순서 규칙이 "같은 `TutorialType` 안에서 `Code` 오름차순" 하나라는 점을 문서와 시트 가이드에 명시하고, 쓰지 않는 컬럼은 정리하는 것이 맞다.
+> * **`TargetObject` 컬럼이 모드에 따라 다른 뜻으로 쓰인다.** 일반 UI 튜토리얼에서는 하이라이트할 대상 코드(`HighlightTarget`)이고, 리듬 인게임에서는 등장 시점 틱(`newTick >= row.TargetObject`, `-1` 이면 즉시 시작)이다.
+>   기획자가 시트를 편집할 때 혼동하기 쉬우므로 별도 컬럼으로 나누거나, 시트 로드 시 모드별 값 범위를 검증하는 것이 좋다.
+> * **엔진 코드에 하드코딩된 값이 남아 있다.** 팝업 대기를 건너뛰는 튜토리얼 `{ 13, 14 }`, 게임 씬 대상으로 취급하는 `ingameTargetList`(1003 ~ 23605), 씬 이름 문자열 `switch`, 초상화·텍스트 박스 좌표(`-256f`, `780f` 등), 아티스트 코드에서 리소스 코드(`2001000` ~ `2006000`)로 바꾸는 `switch` 가 그렇다.
+>   이런 값이 늘수록 "시트만 고치면 된다"는 이점이 줄어들므로 시트 컬럼이나 `ScriptableObject` 로 옮기는 편이 좋다.
+> * **취소와 정리 경로가 불완전하다.** 팝업 대기와 `WaitClick` 의 `UniTask.WaitUntil(() => isScreenClicked || isSkipButtonClicked)` 에는 토큰이 전달되지 않고, `OnDestroy` 는 진행 중인 `Run` 을 취소하거나 `CancellationTokenSource` 를 `Dispose` 하지 않는다. 스킵도 현재 스텝이 정상 반환된 뒤 다음 스텝의 `ThrowIfCancellationRequested` 에서 끝나는 구조로 보인다.
+>   `GetCancellationTokenOnDestroy()` 와 연결한 토큰을 모든 대기에 전달하고, 스킵 플래그를 `WaitClick` 직후에 확인해 바로 빠져나오게 하면 된다.

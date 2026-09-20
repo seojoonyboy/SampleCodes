@@ -1,11 +1,11 @@
 # 추가 리소스 다운로드 (Additional Resource Download)
 
 모바일 환경에서는 와이파이에서 셀룰러로 전환되는 순간, 지하철 구간 진입, 일시적인 기지국 혼잡 등으로
-다운로드가 언제든 끊길 수 있습니다. STARWAY는 게임 실행 시점(Title 화면)에 서버로부터 테이블 데이터와
+다운로드가 언제든 끊길 수 있다. STARWAY는 게임 실행 시점(Title 화면)에 서버로부터 테이블 데이터와
 UI/스테이지 리소스를 내려받아야 진행이 가능한 구조이기 때문에, 이 콜드 스타트 구간에서 네트워크가
-불안정하면 유저는 게임을 아예 시작하지 못합니다. 이 문서는 `TitleScene.cs`와 `NetworkManager.cs`에서
+불안정하면 유저는 게임을 아예 시작하지 못한다. 이 문서는 `TitleScene.cs`와 `NetworkManager.cs`에서
 그 다운로드 파이프라인이 실패를 어떻게 감지하고, 어디까지 되돌아가서 재시도하는지를 코드 레벨로
-정리합니다.
+정리한다.
 
 AssetData의 경우 기획자가 작성한 Game에 필요한 테이블 정보 Binary 파일을 말한다.   
 ![image](https://github.com/user-attachments/assets/bf37b3eb-dd01-43ef-a17e-957c515b2e7e)   
@@ -15,10 +15,10 @@ AssetData의 경우 기획자가 작성한 Game에 필요한 테이블 정보 Bi
 
 **설계 포인트 — 두 리소스를 왜 다르게 다루는가**
 
-같은 "다운로드"처럼 보이지만 두 데이터는 갱신 단위와 실패 시 감수해야 할 비용이 다릅니다. AssetData는
+같은 "다운로드"처럼 보이지만 두 데이터는 갱신 단위와 실패 시 감수해야 할 비용이 다르다. AssetData는
 파일 단위로 잘게 쪼개져 있어 필요한 파일만 골라 받을 수 있는 반면(3단계), ResourceData는 이미지/스테이지
-번들을 zip 하나로 묶어 받는 대신 압축 해제 이전까지는 "부분적으로 받은 상태"가 의미를 가지지 못합니다.
-그래서 두 단계는 아래에서 보듯 서로 다른 재시도 전략(파일 단위 재개 vs zip 단위 재다운로드)을 갖습니다.
+번들을 zip 하나로 묶어 받는 대신 압축 해제 이전까지는 "부분적으로 받은 상태"가 의미를 가지지 못한다.
+그래서 두 단계는 아래에서 보듯 서로 다른 재시도 전략(파일 단위 재개 vs zip 단위 재다운로드)을 갖는다.
 
 State 로 다운로드 단계를 관리하고 절차적으로 진행되도록 한다.   
 > AssetDataDownload, AssetDataDownloadFinished, ResourceDataDownload, ResourceDataDownloadFinished
@@ -39,11 +39,12 @@ public enum STATE
 }
 ```
 
-`TitleScene`은 이 enum 값을 하나씩 순서대로만 세팅합니다(역행하지 않음). 각 상태 전환 시점마다
+`TitleScene`은 이 enum 값을 대체로 위에서 아래 순서로 세팅한다. 다만 실제 코드는 `ResourceDataDownload` → `ResourceDataDownloadFinished` → `AssetDataDownload` 순으로 세팅하고 `AssetDataDownloadFinished` 는 세팅하지 않으며,
+실패해서 재시작할 때는 `Logo` 단계로 돌아간다(enum 의 선언 순서와 실행 순서가 같지는 않다). 각 상태 전환 시점마다
 `titleView.UpdateLoadingText(msg)`로 로딩 문구를 갈아끼우기 때문에, 다운로드가 어느 단계에서 멈췄는지
-로그 없이도 화면 문구만으로 파악할 수 있습니다. 별도의 부팅 게이트 체인(`NetworkManager.Open()` 쪽
+로그 없이도 화면 문구만으로 파악할 수 있다. 별도의 부팅 게이트 체인(`NetworkManager.Open()` 쪽
 버전 체크·강제 업데이트·공지 팝업 흐름)은 [TitleSequence 문서](05.Network/02.%20TitleSequence/readme.md)에서
-다루며, 이 문서는 그 체인을 통과한 뒤에 이어지는 "리소스 실체 다운로드" 구간에 집중합니다.
+다루며, 이 문서는 그 체인을 통과한 뒤에 이어지는 "리소스 실체 다운로드" 구간에 집중한다.
 
 ## 1단계 — 받아야 할 목록 확인
 
@@ -114,12 +115,12 @@ private IEnumerator WaitRequestResourceDataList()
 
 **설계 포인트**
 
-- 로컬에 저장된 `AssetVersion`(PlayerPrefs)을 서버에 함께 보내 "지금 버전 대비 갱신분"만 요청합니다.
+- 로컬에 저장된 `AssetVersion`(PlayerPrefs)을 서버에 함께 보내 "지금 버전 대비 갱신분"만 요청한다.
   매번 전체 목록을 받는 대신 diff 개념으로 접근한 것으로, 이후 3단계에서 파일 단위 diff와 같은 맥락으로
-  이어집니다.
+  이어진다.
 - 목록 조회 자체가 실패하면(`assetList == null`) 팝업 확인 콜백에서 `StartCoroutine(Initialize(true))`로
-  **타이틀 초기화 코루틴 전체를 처음부터 다시 태웁니다**(`isSkipLogo = true`라 로고 연출만 건너뜁니다).
-  개별 단계를 재시도하는 대신 상위 루틴으로 되돌리는 단순하고 보수적인 복구 전략입니다.
+  **타이틀 초기화 코루틴 전체를 처음부터 다시 태운다**(`isSkipLogo = true`라 로고 연출만 건너뛴다).
+  개별 단계를 재시도하는 대신 상위 루틴으로 되돌리는 단순하고 보수적인 복구 전략이다.
 
 ## 2단계 — ResourceData 다운로드
 
@@ -324,7 +325,7 @@ private IEnumerator WaitResourceDataDownload(TitleView titleView)
 }
 ```
 
-같은 파일 안에 있는 `CheckPosition` 코루틴이 위 다운로드 루프를 감시하는 워치독입니다.
+같은 파일 안에 있는 `CheckPosition` 코루틴이 위 다운로드 루프를 감시하는 워치독이다.
 
 ```csharp
 private IEnumerator CheckPosition(FileStream fs, HTTPRequest request, CancellationTokenSource tokenSource, CancellationTokenSource tokenSource2, Action callback)
@@ -362,39 +363,39 @@ private IEnumerator CheckPosition(FileStream fs, HTTPRequest request, Cancellati
 
 **설계 포인트**
 
-- `HTTPRequest.ConnectTimeout`을 `TimeSpan(0, 0, 15)`로 명시적으로 지정합니다. BestHTTP의 기본 타임아웃에
+- `HTTPRequest.ConnectTimeout`을 `TimeSpan(0, 0, 15)`로 명시적으로 지정한다. BestHTTP의 기본 타임아웃에
   기대지 않고 이 프로젝트가 겪는 실제 회선 환경(3G/LTE 전환 구간 포함)에 맞춰 숫자를 코드에 못박아 둔
-  값입니다.
+  값이다.
 - `HTTPRequest.OnStreamingData`로 데이터가 스트리밍되는 족족 `fs.Write`로 파일에 흘려 쓰면서 동시에
-  `position`을 누적합니다. `ConnectTimeout`은 "연결 자체가 안 되는" 상황만 잡아내므로, "연결은 됐지만
-  응답이 뚝뚝 끊겨 진행이 멈춘" 상황을 잡기 위해 별도로 `CheckPosition` 워치독을 코루틴으로 병행 실행합니다
-  — 1초마다 `position`을 스냅샷 떠서, 500번(약 500초) 동안 값이 그대로면 멈춘 것으로 간주하고 강제로
-  취소·재시작시킵니다. 타임아웃 하나만으로는 잡을 수 없는 "느리게 죽어가는 연결"까지 감시 범위에 넣은
-  것입니다.
-- 다운로드는 파일 단위가 아니라 **zip 전체 단위**로 실패를 처리합니다. `catch` 블록에서 예외가 나면
-  같은 `OnClickDownloadAssets(titleView)`를 그대로 다시 호출해 해당 zip을 처음부터 다시 받습니다 —
+  `position`을 누적한다. `ConnectTimeout`은 "연결 자체가 안 되는" 상황만 잡아내므로, "연결은 됐지만
+  응답이 뚝뚝 끊겨 진행이 멈춘" 상황을 잡기 위해 별도로 `CheckPosition` 워치독을 코루틴으로 병행 실행한다
+  — 1초마다 카운터를 올리다가 500번이 넘으면(약 500초마다) 그 시점의 `position` 을 이전 스냅샷과 비교하고, 값이 그대로면
+  멈춘 것으로 간주해 강제로 취소·재시작시킨다. 타임아웃 하나만으로는 잡을 수 없는 "느리게 죽어가는 연결"까지 감시 범위에 넣은
+  것이다.
+- 다운로드는 파일 단위가 아니라 **zip 전체 단위**로 실패를 처리한다. `catch` 블록에서 예외가 나면
+  같은 `OnClickDownloadAssets(titleView)`를 그대로 다시 호출해 해당 zip을 처음부터 다시 받는다 —
   압축 해제 전까지는 파일이 "반쯤 유효한" 상태를 가질 수 없기 때문에, 이어받기 대신 통짜 재다운로드를
-  선택한 것입니다(3단계의 파일 단위 이어받기와 의도적으로 다른 전략).
-- 압축 해제 후 `config.json`을 읽어 `deleteFiles` 목록에 있는 파일을 로컬에서 지워줍니다. 리소스
+  선택한 것이다(3단계의 파일 단위 이어받기와 의도적으로 다른 전략).
+- 압축 해제 후 `config.json`을 읽어 `deleteFiles` 목록에 있는 파일을 로컬에서 지워준다. 리소스
   갱신이 "추가"뿐 아니라 "삭제"까지 표현할 수 있어야 구버전 리소스가 기기에 계속 쌓이는 문제를 막을 수
-  있습니다.
+  있다.
 
 **실제 라이브 대응 과정에서**
 
 이 구간의 재시도·타임아웃 값들은 처음부터 이 숫자로 정해진 것이 아니라, 라이브 운영 중 관측된 실패
-패턴에 맞춰 반복적으로 튜닝된 흔적입니다. 리소스 다운로드 중 네트워크가 불안정해지는 케이스에 대응하는
+패턴에 맞춰 반복적으로 튜닝된 흔적이다. 리소스 다운로드 중 네트워크가 불안정해지는 케이스에 대응하는
 재시도 로직이 `NetworkManager.cs`에 먼저 들어갔고, 실제 QA/라이브 테스트를 거친 뒤 얼마 지나지 않아
-재시도 임계값이 한 차례 더 조정되었습니다. 같은 날 저녁과 다음 날에 걸쳐 HTTP 타임아웃 값도 추가로
+재시도 임계값이 한 차례 더 조정되었다. 같은 날 저녁과 다음 날에 걸쳐 HTTP 타임아웃 값도 추가로
 관측 기반으로 두 차례 손질되었는데, 위 `ConnectTimeout = 15초`와 `CheckPosition`의 "500회 대기" 임계값이
-바로 그 튜닝의 결과물입니다 — 도입 → 실측 → 재조정을 두 차례 거친, "감으로 정한 숫자가 아니라 실패
-로그를 보고 좁혀 들어간 숫자"라는 점이 이 코드 구간의 특징입니다.
+바로 그 튜닝의 결과물이다 — 도입 → 실측 → 재조정을 두 차례 거친, "감으로 정한 숫자가 아니라 실패
+로그를 보고 좁혀 들어간 숫자"라는 점이 이 코드 구간의 특징이다.
 
 ## 3단계 — AssetData 다운로드
 
 > 네트워크 불가시 재연결 시도를 하고, 재연결시 다음 파일부터 이어서 다운로드 받는다.
 
 호출부는 `TitleScene.WaitAssetDataCheck()`이며, 실제 다운로드 로직은 `NetworkManager.TestAssetLoader()`에
-있습니다.
+있다.
 
 ```csharp
 networkManager.TestAssetLoader((isDownloadExist) =>
@@ -415,6 +416,9 @@ networkManager.TestAssetLoader((isDownloadExist) =>
 },
 dto => { });
 ```
+
+> 아래 코드는 이 폴더의 샘플(`05.Network/01.ReDownloadable/NetworkManager.cs`) 기준이다. 이후 최신 클라이언트에서는 `TestAssetLoader` 에 "새로 받을 파일 수"를 미리 세는 diff 단계(`Task.Run`),
+> 타이틀별 `switch`(복호화 방식 차이), 점수 모드 파일 갱신 플래그(`isScoreModeFileUpdated`)가 추가되었고 `progress` 의 분모도 새로 받을 파일 수로 바뀌었다.
 
 ```csharp
 public async void TestAssetLoader(Action<bool> callback, Action<int, int> progress, Action<FileDto> targetToDownload = null)
@@ -515,30 +519,49 @@ public async void TestAssetLoader(Action<bool> callback, Action<int, int> progre
 
 **설계 포인트**
 
-- 2단계와 정반대의 전략입니다. 각 테이블 파일은 `playerSheetStorage.IsFileExist(file.filename,
+- 2단계와 정반대의 전략이다. 각 테이블 파일은 `playerSheetStorage.IsFileExist(file.filename,
   file.createdAt)`로 **파일 단위 diff**를 먼저 확인하고, 이미 가진(버전이 같은) 파일은 네트워크 호출
-  없이 건너뜁니다. 실패도 파일 단위로 격리되기 때문에, 재시도가 처음부터 다시 시작해도 `IsFileExist`
-  체크에 걸려 이미 받은 파일은 재요청하지 않습니다 — 주석의 "재연결시 다음 파일부터 이어서 다운로드"가
-  실제로는 "전체를 재호출하되 받은 파일은 자연히 스킵되는" 방식으로 구현되어 있습니다.
+  없이 건너뛴다. 실패도 파일 단위로 격리되기 때문에, 재시도가 처음부터 다시 시작해도 `IsFileExist`
+  체크에 걸려 이미 받은 파일은 재요청하지 않는다 — 주석의 "재연결시 다음 파일부터 이어서 다운로드"가
+  실제로는 "전체를 재호출하되 받은 파일은 자연히 스킵되는" 방식으로 구현되어 있다.
 - 실패 시 `this.TestAssetLoader(callback, progress, targetToDownload)`를 **같은 함수 안에서 재귀
-  호출**합니다. 이 재귀에 브레이크가 없다면 응답이 계속 실패하는 한 무한히 반복될 수 있는데,
+  호출**한다. 이 재귀에 브레이크가 없다면 응답이 계속 실패하는 한 무한히 반복될 수 있는데,
   `assetLoadRetryCount`가 5 이상이면 재귀를 멈추고 `OpenRestartGamePopup`으로 유저에게 재시작을
-  요구합니다. 실패 원인이 파일 하나의 일시적 오류가 아니라 서버·회선 자체의 문제일 가능성이 높다고
-  보고, "조용히 계속 재시도"에서 "유저 개입을 요구"로 전환하는 상한선입니다.
-- 재시도 카운트는 파일 하나라도 성공하면(`this.assetLoadRetryCount = 0`) 즉시 초기화됩니다. 즉 이
+  요구한다. 실패 원인이 파일 하나의 일시적 오류가 아니라 서버·회선 자체의 문제일 가능성이 높다고
+  보고, "조용히 계속 재시도"에서 "유저 개입을 요구"로 전환하는 상한선이다.
+- 재시도 카운트는 파일 하나라도 성공하면(`this.assetLoadRetryCount = 0`) 즉시 초기화된다. 즉 이
   카운터는 "누적 실패 횟수"가 아니라 "연속 실패 횟수"에 가깝게 동작해, 간헐적으로만 실패하는 회선에서
-  불필요하게 재시작 팝업이 뜨는 것을 막아줍니다.
-- `progress` 콜백으로 `(currentIndex, totalFileCount)`를 매 파일마다 넘겨 게이지 바를 갱신합니다. 2단계는
+  불필요하게 재시작 팝업이 뜨는 것을 막아준다.
+- `progress` 콜백으로 `(currentIndex, totalFileCount)`를 매 파일마다 넘겨 게이지 바를 갱신한다. 2단계는
   바이트 단위 진행률(`OnStreamingData`)을, 3단계는 파일 개수 단위 진행률을 쓰는데, 이는 각각 "zip 하나를
-  스트리밍으로 받는다"와 "작은 파일 여러 개를 순회한다"는 전송 방식의 차이를 그대로 반영한 결과입니다.
+  스트리밍으로 받는다"와 "작은 파일 여러 개를 순회한다"는 전송 방식의 차이를 그대로 반영한 결과이다.
 
 이 통신 계층은 이후 STARWAY 라인업이 6개 아이돌 IP 타이틀로 늘어나면서 Git 서브모듈 구조로 공용화되어,
-동일한 다운로드/재시도 로직을 6개 프로젝트가 함께 사용하게 됩니다. 10인 미만 스튜디오가 타이틀마다
+동일한 다운로드/재시도 로직을 6개 프로젝트가 함께 사용하게 된다. 10인 미만 스튜디오가 타이틀마다
 네트워크 계층을 새로 짜지 않고 이 코드를 그대로 재사용할 수 있었던 것은, 여기서 보듯 실패 처리가
-`ClientErrorType` 이넘과 팝업 콜백으로 일관되게 추상화되어 있었기 때문입니다.
+`ClientErrorType` 이넘과 팝업 콜백으로 일관되게 추상화되어 있었기 때문이다.
 
 ---
 
 **관련 코드**:
 - [NetworkManager 부팅 게이트 시퀀스 분석 (TitleSequence)](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/05.Network/02.%20TitleSequence/readme.md) — 이 다운로드 단계 이전에 통과해야 하는 버전 체크/강제 업데이트/공지 팝업 게이트 체인
 - [Git 브랜치 전략](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/06.GitBranchStrategy) — 이 통신 계층을 6개 타이틀이 공유하게 되면서 정리된 브랜치/서브모듈 운영 방식
+
+---
+
+한계와 개선 방향
+------------------
+> * **압축 해제 결과를 확인하지 않고 버전을 기록한다.** `UnZipFiles` 는 `bool` 을 반환하지만 `await Task.Run(() => UnZipFiles(...))` 의 결과를 쓰지 않고, 내부 `catch` 는 예외를 삼킨 채 zip 까지 삭제한다. 해제가 중간에 실패해도 `isError` 는 `false` 로 남아 `AssetVersion` 이 최신값으로 저장된다.
+>   반환값을 실패로 취급하고, 크기/해시 검증을 통과한 뒤에만 버전을 기록하는 것이 안전하다.
+> * **`OnClickDownloadAssets` 의 예외 경로가 불완전하다.** 바깥 `catch` 는 본문이 주석뿐이라 `config.json` 파싱 등에서 예외가 나면 `jobFinished` 가 `true` 가 되지 않아 팝업 없이 대기한다. 안쪽 `catch` 는 `foreach` 를 빠져나가지 않고, 확인 콜백이 함수를 다시 호출하므로 이전 루프와 `position`/`isError` 를 함께 건드릴 수 있다. zip 재시도에는 횟수 상한도 없다.
+>   루프를 `break`/`return` 으로 명확히 끝내고, 재시도 상한과 최종 실패 처리를 한 곳에 모으는 것이 좋다.
+> * **타임아웃/워치독 값이 흩어져 있고 감시 코루틴의 수명이 파일 단위로 정리되지 않는다.** `ConnectTimeout` 15초, `waitCount > 500`, `SBHttp.RequestFile` 의 `Timeout` 500초, 일반 요청의 30초가 서로 다른 곳에 하드코딩되어 있다. `CheckPosition` 은 약 500초 간격으로만 진행량을 비교하므로 정체가 구간 중간에 시작되면 감지까지 최대 약 1,000초가 걸릴 수 있고, 종료 조건이 전체 `position < totalSize` 뿐이라 파일이 여럿이면 이전 파일용 감시 코루틴이 남는다.
+>   값을 설정으로 모으고 "마지막 진행 시각" 기준으로 판정하며 파일마다 감시를 시작/종료하는 구조가 낫다.
+> * **`TestAssetLoader` 의 실패 판정이 실제 실패 형태를 다 잡지 못한다.** 재시도는 `data == null` 일 때만 작동하는데, `SBHttp.RequestFile` 은 HTTP 오류 응답이어도 `new byte[0]` 을 오류 코드와 함께 넘기므로 재시도 없이 빈 데이터가 저장 경로로 흘러간다. 파일 목록 요청이 실패해 `null` 이 오면 `foreach` 앞에 null 검사가 없고, `async void` 라 예외가 호출자에게 가지 않으며 `callback` 도 불리지 않는다.
+>   `ResponseCode` 까지 검사하고 목록 요청 실패도 같은 재시도 경로에 태워야 한다.
+> * **재귀 호출 방식의 재시도는 이전 호출이 정리되지 않는다.** 실패 콜백은 `reqSrc` 를 완료시키지 않고 `TestAssetLoader` 를 새로 호출하므로 원래 호출은 `await reqSrc.Task` 에서 영원히 대기한다. 카운터도 팝업 확인 뒤에 증가하는 인스턴스 필드 하나를 공유한다.
+>   `async Task` 로 바꾸고 파일 단위 루프 안에서 상한과 백오프를 두고 재시도하면 호출이 하나로 유지된다.
+> * **목록 조회 실패 복구가 "타이틀 초기화 전체 재시작"에 의존한다.** `assetList` 가 `null` 이면 `StartCoroutine(Initialize(true))` 로 새 체인을 시작하지만, 원래 코루틴은 `isSuccess` 가 호출되지 않아 `WaitUntil(() => responseReceived)` 에 남고 `NetworkManagerOpen()` 도 다시 실행된다. `STATE` 값 역시 실제로는 열거 순서대로 진행하지 않는다(`ResourceDataDownload` 를 `AssetDataDownload` 보다 먼저 세팅).
+>   단계 내부의 횟수 제한 있는 재시도로 처리하고 상태 전이를 명시하는 것이 좋다.
+> * **공용 계층에 타이틀별 분기와 하드코딩이 섞여 있다.** 최신 클라이언트의 `TestAssetLoader` 에는(이 샘플 폴더의 버전에는 없다) `GetNameString()` 으로 `KWONEUNBIINFO`/`IKONINFO` 만 다르게 처리하는 `switch` 가 세 번 반복되고, zip 비밀번호는 소스 상수(`zipPassword`)라 클라이언트 바이너리에서 복구될 수 있어 접근 통제로는 약하다. 쓰이지 않는 `DummyWaitNetworkAvailableState`, `dummyLoading` 도 남아 있다.
+>   타이틀별 차이는 전략 객체로 분리하고, 무결성은 서버 서명/해시로 확보하며, 죽은 코드는 제거한다.

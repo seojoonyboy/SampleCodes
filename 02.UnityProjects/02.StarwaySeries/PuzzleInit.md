@@ -146,4 +146,17 @@ public void LoadStage()
 - **시작 판 품질 보장** — `LoadStage` 안에서 `Hint` 계산을 즉시 수행해, 매칭이 하나도 없는 상태로 게임이 시작되는 경우를 코드 레벨에서 차단한다.
 - **코루틴이 아닌 async 기반 진행 루프** — 초기화 직후 매칭/중력 처리를 이어받는 `coMatchAndGravity`는 `UniTask` 타입 필드로, 코루틴이 아닌 async/await로 관리된다.
 
-관련 코드: [BlockMatchLogic.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md) · [07.BlockControl 폴더](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/07.BlockControl)
+---
+
+한계와 개선 방향
+------------------
+> * **`InitStage` 의 "진행 중인 중력 처리 취소"가 실제로는 동작하지 않는다.** `InitStage` 는 지역 변수 `CancellationTokenSource gravityCts` 를 만들고 `coMatchAndGravity` 가 있으면 `Cancel()` 을 호출하지만,
+>   이 토큰은 어디에도 전달되지 않는다(`StopCoroutine` 줄은 주석 처리됨). 코루틴에서 UniTask 로 옮길 때 "실행 중인 매치/중력 루프를 끊는다"는 동작이 빠진 채 남은 것이다.
+>   토큰을 필드로 두고 `MatchAndGravity(token)` 에 전달해 `Clear()`/`InitStage()` 에서 취소하는 것이 맞다([100.Docs/01.최적화](./100.Docs/01.%EC%B5%9C%EC%A0%81%ED%99%94/readme.md) 의 한계 참고).
+> * **시작 판 재정렬(`hint.Refresh()`)이 실패했을 때의 처리가 없다.** 200회 시도 안에 "이미 맞춰진 곳은 없고 움직일 곳은 있는" 판을 못 만들어도 그대로 게임이 시작된다([07.BlockControl](./07.BlockControl/readme.md) 참고).
+> * **`StageController` 가 3,400줄이 넘는 한 클래스다.** 스테이지 로딩, 입력, 매칭/중력 루프, 미션 블록 피격, 힌트, 스킬 블록 발동이 함께 있어 초기화 흐름만 따로 테스트하기 어렵다.
+>   `StageLoader`(JSON → `Stage` → 화면 오브젝트)와 `MatchLoop`(매칭/중력)로 나누는 것이 첫 단계다.
+> * **화면 오브젝트가 문자열 경로로 로딩된다.** 배경 타일(`"Tiles/Backgrounds/110/" + filename`), 블록 스프라이트(`"Blocks/110/" + ...`) 모두 `Resources.Load` 문자열 조회라 오타가 런타임에서야 드러나고 빌드에 포함되는 리소스도 통제하기 어렵다.
+>   Addressables 나 타입이 있는 리소스 테이블로 바꾸면 검증과 프리로드가 쉬워진다.
+
+관련 문서: [BlockMatchLogic.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md) · [07.BlockControl](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/07.BlockControl) (힌트·스테이지 데이터)

@@ -2,12 +2,12 @@
 STARWAY는 하나의 코어 코드베이스를 기반으로 김호중·장민호·강다니엘·에이티즈·권은비·아이콘까지 총 6개의 아티스트 IP 타이틀을 순차 런칭하는 구조였다. 각 타이틀(예: SWKHJ, SWKD)은 공통 로직은 대부분 동일하지만 디자인 리소스, 폰트, 일부 연출만 다른 "파생 프로젝트" 형태로 개발이 진행되었고, 이 과정에서 아래와 같은 브랜치 병합 제약이 실제로 발생했다.
 
 ## 문제 상황
-  - SWKHJ Branch가 Main Branch로 계속 합쳐지고 있다. 때문에 이후 파생 프로젝트(예: SWKD) Branch는 Main Branch로 Merge가 불가합니다. 
+  - SWKHJ Branch가 Main Branch로 계속 합쳐지고 있다. 때문에 이후 파생 프로젝트(예: SWKD) Branch는 Main Branch로 Merge가 불가하다. 
     더 자세히 설명하면, 파생 Branch의 디자인 리소스, 폰트 등이 Main Branch에 덮어씌워지기 때문 (이 부분에 대해서는 서브모듈로 전환을 검토중이고, 그 이전까지는...)
 
-  - 마찬가지 이유로 SWKHJ <--- SWKD Merge는 문제가 발생할 수 있습니다. KHJ에 SWKD의 디자인 리소스가 덮어씌워지니까...
+  - 마찬가지 이유로 SWKHJ <--- SWKD Merge는 문제가 발생할 수 있다. KHJ에 SWKD의 디자인 리소스가 덮어씌워지니까...
   
-  - 결론적으로, 서브 모듈화 적용 이전까지는 다음의 규칙을 지켜야 합니다.
+  - 결론적으로, 서브 모듈화 적용 이전까지는 다음의 규칙을 지켜야 한다.
   
   1. SWKD는 SWKHJ의 내용을 가져오는 것은 허용
   2. SWKHJ의 Release 브랜치를 Main Branch로 Merge는 허용
@@ -30,15 +30,15 @@ STARWAY는 하나의 코어 코드베이스를 기반으로 김호중·장민호
     - feature
     - hotfix
 
-  - **feature, hotfix -> develop -> release** 순으로 병합됩니다.
-  - 예를 들어, 최초 작업은 **feature** 혹은 **hotfix** 브랜치를 새로 만들어 진행하고, 개발자들간의 공유 수준까지 올라온 뒤, **develop** 브랜치에 병합합니다.
-  - 병합 이후 이슈가 발생한 경우 새롭게 **feature** 브랜치를 만들어 해당 이슈를 대응합니다. 대응 이후 다시 **develop** 브랜치에 병합 (반복)
-  - 어느정도 안정성이 확보된 이후 **develop** 브랜치를 다시 **release** 브랜치에 병합하여 빌드를 공유합니다.
-  - main 브랜치는 release 브랜치를 주기적으로 병합합니다. (안정성 최우선)
+  - **feature, hotfix -> develop -> release** 순으로 병합된다.
+  - 예를 들어, 최초 작업은 **feature** 혹은 **hotfix** 브랜치를 새로 만들어 진행하고, 개발자들간의 공유 수준까지 올라온 뒤, **develop** 브랜치에 병합한다.
+  - 병합 이후 이슈가 발생한 경우 새롭게 **feature** 브랜치를 만들어 해당 이슈를 대응한다. 대응 이후 다시 **develop** 브랜치에 병합 (반복)
+  - 어느정도 안정성이 확보된 이후 **develop** 브랜치를 다시 **release** 브랜치에 병합하여 빌드를 공유한다.
+  - main 브랜치는 release 브랜치를 주기적으로 병합한다. (안정성 최우선)
 
 ![git_graph](https://user-images.githubusercontent.com/110382516/182572212-a39c47f8-a690-4514-9c4e-d98dc8c8238c.PNG)
   
-  - 주요 브랜치 2개는 항상 유지됩니다.
+  - 주요 브랜치 2개는 항상 유지된다.
     - master (main)
     - develop
       + develop/버전

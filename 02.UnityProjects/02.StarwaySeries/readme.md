@@ -41,17 +41,20 @@ STARWAY 3Match Puzzle Game
 
 | 이력서 항목 | 볼 문서 | 코드/커밋으로 확인되는 것 |
 |-------------|---------|---------------------------|
-| 통신 계층 안정화 — 타임아웃·재시도 튜닝, `isRetry` 확장, Invoke 디스패치 수정 | [05.Network/03.ApiException](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/05.Network/03.ApiException/readme.md) | `7f52e7a40`(기본값 파라미터로 기존 호출부 유지), `40b738302`(CP 분기), 2023-02-22/23 재시도·타임아웃 4연속 조정 |
+| 통신 계층 안정화 — 타임아웃·재시도 튜닝, `isRetry` 확장, Invoke 디스패치 수정 | [05.Network/03.ApiException](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/05.Network/03.ApiException/readme.md) | `7f52e7a40`(기본값 파라미터로 기존 호출부 유지), `40b738302`(CP 분기), 2023-02-22/23 재시도·타임아웃 4연속 조정 |
 | IAP 결제에 Ack(3-way handshake 착안) 도입 | [IAPProcess.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/IAPProcess.md) | `Pending` 유지 → 서버 확인 후 `ConfirmPendingPurchase` → `Ack`, 로비 `AckCheck` 복구 (`e581a7ddd`) |
-| 오브젝트 풀링 · Coroutine → UniTask 전환 | [100.Docs/01.최적화](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/100.Docs/01.%EC%B5%9C%EC%A0%81%ED%99%94/readme.md) | 2023-07-18 하루 3연속 커밋: 구축(+409줄) → 반납 버그 수정 → 특수블록 풀링 되돌림 |
-| Android 저지연 오디오(Oboe) | [08.AudioController](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/08.AudioController/readme.md) | `OboeAudioSource(48000, LowLatency, Shared, AAudio ...)`, 시트 기반 재생기 사전 캐시, `#if` 플랫폼 분기 |
-| 부팅 시퀀스 · 리소스 다운로드 네트워크 대응 | [02. TitleSequence](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/05.Network/02.%20TitleSequence/readme.md) · [AdditionalResourceDownload.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/AdditionalResourceDownload.md) | 다단계 게이트 코루틴 체인, 진행 정체 감시(`CheckPosition`), 재시도 상한 |
+| 오브젝트 풀링 · Coroutine → UniTask 전환 | [100.Docs/01.최적화](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/100.Docs/01.%EC%B5%9C%EC%A0%81%ED%99%94/readme.md) | 2023-07-18 하루 3연속 커밋: 구축(+409줄) → 반납 버그 수정 → 특수블록 풀링 되돌림 |
+| Android 저지연 오디오(Oboe) | [08.AudioController](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/08.AudioController/readme.md) | `OboeAudioSource(48000, LowLatency, Shared, AAudio ...)`, 시트 기반 재생기 사전 캐시, `#if` 플랫폼 분기 |
+| 부팅 시퀀스 · 리소스 다운로드 네트워크 대응 | [02. TitleSequence](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/05.Network/02.%20TitleSequence/readme.md) · [AdditionalResourceDownload.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/AdditionalResourceDownload.md) | 다단계 게이트 코루틴 체인, 진행 정체 감시(`CheckPosition`), 재시도 상한 |
 | 팝업 아키텍처(Template Method + Factory) | [PopupUIPattern.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PopupUIPattern.md) | `Popup.Load` 단일 진입점, `OnResultCallback` 결과 전달 |
-| 코드베이스 설계 구조 이해와 확장 | [100.Docs/02.설계패턴](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/100.Docs/02.%EC%84%A4%EA%B3%84%ED%8C%A8%ED%84%B4/readme.md) | View 이벤트 계층, `BroadcastTunnel<K,V>`, 제네릭 FSM, Factory/Memento/전략 배열 (**직접 설계 vs 확장 vs 이해를 구분해서 표기**) |
+| 코드베이스 설계 구조 이해와 확장 | [100.Docs/02.설계패턴](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/100.Docs/02.%EC%84%A4%EA%B3%84%ED%8C%A8%ED%84%B4/readme.md) | View 이벤트 계층, `BroadcastTunnel<K,V>`, 제네릭 FSM, Factory/Memento/전략 배열 (**직접 설계 vs 확장 vs 이해를 구분해서 표기**) |
+| 이벤트 시스템 — 패스 · 일일 출석 · 하트 자동 충전 | [01.Pass](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/01.Pass) · [02.Attendance](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/02.Attendance) · [03.HeartAutoCharge](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/03.HeartAutoCharge) | 서버가 보상을 결정하고 클라이언트는 응답 후 반영(Ack 프로토콜), 서버 시각 기준 카운트다운, 요청 지연을 연출 뒤에 숨기는 구조, 백그라운드 복귀 보정 |
+| 퍼즐 코어 — 힌트 · 스테이지 JSON · 스킬/미션 블록 | [07.BlockControl](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/07.BlockControl) · [CardSkillBlockLogic.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/CardSkillBlockLogic.md) · [BlockMatchLogic.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md) | 스테이지를 데이터로 정의, 복사본에서 백그라운드 힌트 계산, 스킬 블록 배치 골격 (**"구조 이해" 범주**) |
+| 데이터 시트 기반 튜토리얼 | [TutorialPattern.md](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/TutorialPattern.md) | 시트 한 행 = 한 스텝, UniTask + LINQ 로 순차 소비 |
 | 협업 — Git 브랜치 전략 / Submodule | [06.GitBranchStrategy](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/06.GitBranchStrategy) | 6개 앱 공통 코드 분리 관리 |
 
 *이 저장소의 문서 구성 방식*
-> 각 문서는 **문제 → 접근 → 코드(실제 프로젝트에서 그대로 발췌) → 근거(커밋) → 한계와 개선 방향** 순서로 쓴다. 실서비스 코드라서 남아있는 아쉬운 부분도 숨기지 않고
+> 각 문서는 **문제 → 접근 → 코드(실제 프로젝트에서 발췌) → 근거(커밋) → 한계와 개선 방향** 순서로 쓴다. 실서비스 코드라서 남아있는 아쉬운 부분도 숨기지 않고
 > "한계와 개선 방향"에 적었고, 코어 퍼즐 알고리즘처럼 직접 설계하지 않은 부분은 "구조 이해"로 구분했다.
 
 Sample Code
@@ -66,7 +69,13 @@ Sample Code
 > 퍼즐 스테이지 최초 초기화 과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PuzzleInit.md)   
 > 미션 블록 처리과정 설명 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/BlockMatchLogic.md)   
 > 스킬 블록 구현 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/CardSkillBlockLogic.md)   
+> 힌트 계산·막힌 판 재배치, 스테이지 JSON 데이터 구조 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/07.BlockControl)   
 > 오브젝트 풀링 및 Coroutine → UniTask 전환을 통한 인게임 최적화 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/100.Docs/01.%EC%B5%9C%EC%A0%81%ED%99%94/readme.md)   
+
+*이벤트 · 라이브 서비스 화면*
+> 시즌 패스 (보상 트랙 UI, 서버 시각 카운트다운, 모두 받기, Ack) [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/01.Pass)   
+> 일일 출석 (카드 뒤집기 연출과 서버 요청 병행, 자정 날짜 변경 처리) [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/02.Attendance)   
+> 하트 자동 충전 (서버 기준 시각 계산, 백그라운드 복귀 보정) [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/03.HeartAutoCharge)   
 
 *플랫폼/오디오*
 > Android 저지연 오디오(Oboe/AAudio) 연동 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/08.AudioController)   
@@ -74,7 +83,7 @@ Sample Code
 *패턴 설계*
 > MVC 패턴을 활용한 팝업 UI 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/PopupUIPattern.md)   
 > 코드베이스 설계 구조(View 이벤트 계층, 제네릭 이벤트 버스/FSM, Factory·Memento·전략 배열)와 내가 맡은 범위 [문서 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/100.Docs/02.%EC%84%A4%EA%B3%84%ED%8C%A8%ED%84%B4)   
-> 기획자 편의를 제공한 UniTask, Linq, Queue기반 튜토리얼 시스템 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/TutorialPattern.md)   
+> 기획자 편의를 제공한 UniTask, Linq 기반 데이터 시트 튜토리얼 시스템 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/blob/main/02.UnityProjects/02.StarwaySeries/TutorialPattern.md)   
 
 *협업/버전 관리*
 > Git 브랜치 전략 및 서브모듈 전환 배경 [문서 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/02.StarwaySeries/06.GitBranchStrategy)   
