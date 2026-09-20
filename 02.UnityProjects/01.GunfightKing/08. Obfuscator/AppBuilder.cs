@@ -397,7 +397,9 @@ public class AppBuilder : MonoBehaviour
 
 		string keystoreName = /*buildParam.DevelopmentProfile ? "debug.keystore" :*/ "mobirix.keystore";
 		string aliasName = /*buildParam.DevelopmentProfile ? "androiddebugkey" :*/ "key0";
-		string passwd = /*buildParam.DevelopmentProfile ? "android" :*/ "Mobirix2025^2";
+		// [공개 샘플용 수정] 원본에는 키스토어 비밀번호가 소스 상수로 들어 있었다. 저장소에 비밀번호를 두지 않도록
+		// 빌드 서버(Jenkins)의 환경변수로 주입받는 형태로 바꿔서 공개한다.
+		string passwd = System.Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PASS") ?? string.Empty;
 
 		PlayerSettings.Android.keystoreName = $"{Application.dataPath}/../Tools/BuildTool/Keystore/{keystoreName}";
 		PlayerSettings.Android.keystorePass = passwd;

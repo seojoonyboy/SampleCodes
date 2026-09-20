@@ -1,4 +1,6 @@
+using Game.Data;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace Game.View.AI.State
 {
@@ -12,9 +14,12 @@ namespace Game.View.AI.State
 		
 		protected Vector3 _avoidTargetPos;
 		
-		public Avoiding(bl_AIShooterAgent shooterAgent, Vector3 avoidTargetPos) : base(shooterAgent)
+		public Avoiding(bl_AIShooterAgent shooterAgent, Vector3 avoidTargetPos, float duration) : base(shooterAgent)
 		{
 			if(shooterAgent.IsCrouch) shooterAgent.SetCrouch(false);
+			shooterAgent.Agent.speed = shooterAgent.aiSettings.RunSpeed;
+			
+			avoidTime = duration;
 			_avoidTargetPos = avoidTargetPos;
 		}
 
@@ -39,13 +44,13 @@ namespace Game.View.AI.State
 
 	public class SmokeAreaAvoiding : Avoiding
 	{
-		public SmokeAreaAvoiding(bl_AIShooterAgent shooterAgent, Vector3 avoidTargetPos) : base(shooterAgent, avoidTargetPos) { }
+
+		public SmokeAreaAvoiding(bl_AIShooterAgent shooterAgent, Vector3 avoidTargetPos, float duration) : base(shooterAgent, avoidTargetPos, duration) { }
 		
 		public override void Enter()
 		{
 			base.Enter();
 			
-			avoidTime = 3.0f;
 			shooterAgent.SetDestination(_avoidTargetPos);
 		}
 
@@ -53,17 +58,26 @@ namespace Game.View.AI.State
 		{
 			return false;
 		}
+
+		protected override void UpdateMoving()
+		{
+			//목적지 [연막탄을 벗어나는 위치] 도달시 즉시 해당 행동을 Exit 한다.
+			if (shooterAgent.Agent.remainingDistance <= 0.1f)
+			{
+				nextState = new Searching(shooterAgent);
+				Exit();
+			}
+		}
 	}
 
 	public class FlashAreaAvoiding : Avoiding
 	{
-		public FlashAreaAvoiding(bl_AIShooterAgent shooterAgent, Vector3 avoidTargetPos) : base(shooterAgent, avoidTargetPos) { }
+		public FlashAreaAvoiding(bl_AIShooterAgent shooterAgent, Vector3 avoidTargetPos, float duration) : base(shooterAgent, avoidTargetPos, duration) { }
 		
 		public override void Enter()
 		{
 			base.Enter();
 			
-			avoidTime = 3.0f;
 			shooterAgent.SetDestination(_avoidTargetPos);
 		}
 

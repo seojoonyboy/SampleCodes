@@ -12,6 +12,8 @@ namespace Game.View.AI.State
 	/// </summary>
     public class Searching : IAIState
     {
+	    private float _stopCooltime = 1.0f;
+	    
 		public Searching(bl_AIShooterAgent shooterAgent) : base(shooterAgent)
 		{
 			if(shooterAgent.IsCrouch) shooterAgent.SetCrouch(false);
@@ -26,7 +28,8 @@ namespace Game.View.AI.State
 			{
 				shooterAgent.Agent.SetDestination(wayPoints[0]);
 			}
-			
+
+			shooterAgent.Agent.stoppingDistance = 0.2f;
 			DebugEx.AILog("Enter Searching State...");
 		}
 
@@ -49,7 +52,7 @@ namespace Game.View.AI.State
 					//감지된 적들 중 보이는 적이 있는 경우
 					if (IsVisibleTarget(detactedTarget))
 					{
-						nextState = new HoldingPositionAttacking(shooterAgent);
+						nextState = GetRandomAttackState();
 						
 						shooterAgent.SetTarget(detactedTarget);
 						shooterAgent.Agent.SetDestination(detactedTarget.transform.position);
@@ -95,6 +98,7 @@ namespace Game.View.AI.State
 				
 				if (!IsLastWayPoint())
 				{
+					DecideRandomSpeed();
 					MoveToNextWayPoint();	
 				}
 				else
@@ -114,12 +118,23 @@ namespace Game.View.AI.State
 				//수비조인 경우, 무작위 설치 지역으로 이동한다.
 				if (!IsTerrorlistTeam)
 				{
-					DemolitionBombZone randomDemolitionZone = aiManager.GetRandomDemolitionZone();
-					Vector3 begin = shooterAgent.transform.position;
-					Vector3 end = randomDemolitionZone.transform.position;
+					DemolitionBombZone randomDemolitionZone = DemolitionBombManager.Instance.GetRandomDemolitionZone();
+					if (randomDemolitionZone != null)
+					{
+						Vector3 begin = shooterAgent.transform.position;
+						Vector3 end = randomDemolitionZone.transform.position;
 
-					List<Vector3> newPoints = aiManager.GeneratePathBeginToEndWithEssentialWayPoint(begin, end);
-					MakeWayPoints(newPoints);
+						List<Vector3> newPoints = aiManager.GeneratePathBeginToEndWithEssentialWayPoint(begin, end);
+						MakeWayPoints(newPoints);
+					}
+					//예외 처리 [폭탄 지역을 찾을 수 없음]
+					else
+					{
+						List<Vector3> newPoints = new List<Vector3>();
+						Vector3 newPoint = aiManager.GetRandomNormalWayPoint().transform.position;
+						newPoints.Add(newPoint);
+						MakeWayPoints(newPoints);
+					}
 				}
 				//공격조인 경우, 무작위 NormalPoints 지역으로 이동한다.
 				else
@@ -146,6 +161,18 @@ namespace Game.View.AI.State
 			
 			bool isFound = NavMesh.SamplePosition(rndLocationNearBomb, out NavMeshHit hit, 2.0f, NavMesh.AllAreas);
 			return isFound ? hit.position : bombLocation;
+		}
+
+		private bool IsRandomStop()
+		{
+			bool toStop = Random.Range(0, 100) < 40;
+			return toStop;
+		}
+
+		private void DecideRandomStopCoolTime()
+		{
+			float randRes = Random.Range(0, 1.5f);
+			_stopCooltime = randRes;
 		}
     }
 
@@ -235,6 +262,7 @@ namespace Game.View.AI.State
 			if (DemolitionBombManager.Instance.Bomb == null) return;
 			Vector3 targetPosition = DemolitionBombManager.Instance.Bomb.transform.position;
 
+			shooterAgent.Agent.stoppingDistance = 0.0f;
 			shooterAgent.SetDestination(targetPosition);
 		}
 
@@ -267,7 +295,12 @@ namespace Game.View.AI.State
 			List<Vector3> points = bl_AIManager.Instance.GetMyPath(team, groupID, shooterAgent.transform.position);
 			MakeWayPoints(points);
 
-			DebugEx.AILog("Enter DemolitionAreaSearching State...");
+			var targetBombZone = bl_AIManager.Instance.TargetBombZone;
+			shooterAgent.Agent.stoppingDistance = targetBombZone != null ? 
+				targetBombZone.GetComponent<SphereCollider>().radius : 
+				0.25f;
+			
+			DebugEx.Log("[Bomb] 폭탄 설치하러 가는 중");
 		}
 
 		public override void MakeWayPoints(List<Vector3> _wayPoints)
@@ -319,10 +352,10 @@ namespace Game.View.AI.State
 			if (wayPoints == null || wayPoints.Count < 1) return;
 			if (currentWayPointIndex + 1 > wayPoints.Count)
 			{
-				Vector3? targetBombZoneLocation = bl_AIManager.Instance.GetTargetBombZone();
-				if (targetBombZoneLocation != null)
+				DemolitionBombZone bombInstalledZone = bl_AIManager.Instance.TargetBombZone;
+				if (bombInstalledZone != null)
 				{
-					shooterAgent.Agent.SetDestination(targetBombZoneLocation.Value);
+					shooterAgent.Agent.SetDestination(bombInstalledZone.transform.position);
 				}
 				
 				return;

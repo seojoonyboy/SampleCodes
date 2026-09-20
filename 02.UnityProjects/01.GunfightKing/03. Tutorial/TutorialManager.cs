@@ -76,8 +76,6 @@ namespace Game.View.BattleSystem
 		public List<GameObject> BeginDecalWayPoint;		//첫 시작과 동시에 나오는 지면 Decal과 화살표
 
 		public bool IsPopupExist = false;
-		
-		CancellationTokenSource TutorialCancellationToken;
 
 		public Action OnReloadButton;
 
@@ -94,7 +92,9 @@ namespace Game.View.BattleSystem
 		Queue<TutorialTask> _tutorialTasks;
 		TutorialSubType _selectedTutorialType;
 
+		public CancellationTokenSource TutorialCancellationToken;
 		public TutorialTask CurrentTutorialTask;
+		
 		int _currentTutorialTaskIndex;
 		int _currentButtonActiveFlag;		//현재 버튼 활성화 상태 비트 Flag
 
@@ -704,7 +704,7 @@ namespace Game.View.BattleSystem
 
 			try
 			{
-				await UniTask.WaitForSeconds(_waitTime, cancellationToken: CancellationTokenSource.Token);
+				await UniTask.WaitForSeconds(_waitTime, cancellationToken: TutorialCancelToken);
 			}
 			catch (OperationCanceledException) { }
 
@@ -757,7 +757,7 @@ namespace Game.View.BattleSystem
 					TutorialManager.Instance.BeginDecalWayPoint.Add(targetObj);
 				}
 				
-				await UniTask.WaitForSeconds(_waitTime, cancellationToken: CancellationTokenSource.Token);
+				await UniTask.WaitForSeconds(_waitTime, cancellationToken: TutorialCancelToken);
 				
 				EndTask();
 			}
@@ -837,7 +837,7 @@ namespace Game.View.BattleSystem
 
 			try
 			{
-				await UniTask.WaitUntil(() => _isAllFinished, cancellationToken: CancellationTokenSource.Token);
+				await UniTask.WaitUntil(() => _isAllFinished, cancellationToken: TutorialCancelToken);
 				
 				EndTask();
 			}
@@ -900,7 +900,7 @@ namespace Game.View.BattleSystem
 				{
 					await UniTask.WaitForSeconds(
 						duration, 
-						cancellationToken: CancellationTokenSource.Token);
+						cancellationToken: TutorialCancelToken);
 				
 					TutorialManager.Instance.HideMessage();
 				}
@@ -1016,14 +1016,14 @@ namespace Game.View.BattleSystem
 
 		async UniTaskVoid ShowPlantFinishMessageForSeconds()
 		{
-			await UniTask.WaitForSeconds(1.0f, cancellationToken: CancellationTokenSource.Token);
+			await UniTask.WaitForSeconds(1.0f, cancellationToken: TutorialCancelToken);
 			
 			string context = I18N.Translate("TutorialMode.PlantBombComplete.");
 			TutorialManager.Instance.ShowMessage(context);
-			await UniTask.WaitForSeconds(2.0f, cancellationToken: CancellationTokenSource.Token);
+			await UniTask.WaitForSeconds(2.0f, cancellationToken: TutorialCancelToken);
 			TutorialManager.Instance.HideMessage();
 			
-			await UniTask.WaitForSeconds(1.0f, cancellationToken: CancellationTokenSource.Token);
+			await UniTask.WaitForSeconds(1.0f, cancellationToken: TutorialCancelToken);
 			
 			EndTask();
 		}
@@ -1036,23 +1036,27 @@ namespace Game.View.BattleSystem
 
 		protected override void EndTask()
 		{
-			TutorialManager tutorialManager = TutorialManager.Instance;
+			try
+			{
+				TutorialManager tutorialManager = TutorialManager.Instance;
 			
-			tutorialManager.DemolitionAreaColliderTrigger.Reset();
-			tutorialManager.DemolitionAreaColliderTrigger.SetActiveGo(false);
+				tutorialManager.DemolitionAreaColliderTrigger.Reset();
+				tutorialManager.DemolitionAreaColliderTrigger.SetActiveGo(false);
 			
-			tutorialManager.DemolitionMiniMapItem.HideItem();
+				tutorialManager.DemolitionMiniMapItem.HideItem();
 			
-			tutorialManager.CanLocalPlant = false;
-			tutorialManager.BombInteract = false;
-			tutorialManager.HideMessage();
+				tutorialManager.CanLocalPlant = false;
+				tutorialManager.BombInteract = false;
+				tutorialManager.HideMessage();
 			
-			BattleMainUi.Instance.DemolitionUi.SetActiveGo(false);
+				BattleMainUi.Instance.DemolitionUi.SetActiveGo(false);
 
-			foreach (GameObject arrowDecal in _arrowDecals) { arrowDecal.DestroyGo(); }
-			if(_groundDecal != null) { _groundDecal.DestroyGo(); }
+				foreach (GameObject arrowDecal in _arrowDecals) { arrowDecal.DestroyGo(); }
+				if(_groundDecal != null) { _groundDecal.DestroyGo(); }
 			
-			base.EndTask();
+				base.EndTask();
+			}
+			catch (OperationCanceledException) { }
 		}
 
 		protected override void Cleanup()
@@ -1076,26 +1080,30 @@ namespace Game.View.BattleSystem
 
 		public override void Execute()
 		{
-			base.Execute();
+			try
+			{
+				base.Execute();
 
-			PlaceBomb();
+				PlaceBomb();
 			
-			string context = I18N.Translate("TutorialMode.DefuseBomb.");
+				string context = I18N.Translate("TutorialMode.DefuseBomb.");
 			
-			TutorialManager tutorialManager = TutorialManager.Instance;
-			tutorialManager.DefusingAreaColliderTrigger.SetActiveGo(true);
-			tutorialManager.DefusingAreaColliderTrigger.AddOnTriggerEnterListener(OnDefusingArea);
+				TutorialManager tutorialManager = TutorialManager.Instance;
+				tutorialManager.DefusingAreaColliderTrigger.SetActiveGo(true);
+				tutorialManager.DefusingAreaColliderTrigger.AddOnTriggerEnterListener(OnDefusingArea);
 			
-			tutorialManager.BombInteract = true;
-			tutorialManager.OnDefuseFinished += OnDefused;
-			tutorialManager.ShowMessage(context);
+				tutorialManager.BombInteract = true;
+				tutorialManager.OnDefuseFinished += OnDefused;
+				tutorialManager.ShowMessage(context);
 
-			_arrowDecals = new List<GameObject>();
-			_arrowDecals.AddRange(PlaceArrowDecals(TutorialManager.Instance.GetTutorialWayPoint(6)));
+				_arrowDecals = new List<GameObject>();
+				_arrowDecals.AddRange(PlaceArrowDecals(TutorialManager.Instance.GetTutorialWayPoint(6)));
 			
-			PlaceGroundDecal();
+				PlaceGroundDecal();
 			
-			BattleMainUi.Instance.DemolitionUi.SetActiveGo(true);
+				BattleMainUi.Instance.DemolitionUi.SetActiveGo(true);
+			}
+			catch(OperationCanceledException) { }
 		}
 
 		List<GameObject> PlaceArrowDecals(Transform parent)
@@ -1204,29 +1212,28 @@ namespace Game.View.BattleSystem
 
 		public override async void Execute()
 		{
-			base.Execute();
-
-			string context = I18N.Translate("TutorialMode.ThrowGrenade.");
-			TutorialManager.Instance.ShowMessage(context);
-
-			_grenadeBt = TutorialManager.Instance.GrenadeBt;
-			BattleMainUi.Instance.ButtonLayoutMgr.ToggleHighlight(_grenadeBt.transform, true);
-
-			_grenadeArea = TutorialManager.Instance.GrenadeAreaDecal;
-			_grenadeArea.SetActiveGo(true);
-
-			TutorialGrenadeArea trigger = _grenadeArea.GetComponent<TutorialGrenadeArea>();
-			trigger.AddBombTriggeredActionListener(OnBombEntered);
-			
-			var gunManager = bl_MFPS.LocalPlayerReferences.gunManager;
-			gunManager.EquipWeapons[3].SetInifinityAmmo(true);
-
-			UpdateGrenade();
-
 			try
 			{
-				await UniTask.WaitUntil(() => _isGrenadeEntered, cancellationToken: CancellationTokenSource.Token);
-				await UniTask.WaitForSeconds(3.0f, cancellationToken: CancellationTokenSource.Token);
+				base.Execute();
+
+				string context = I18N.Translate("TutorialMode.ThrowGrenade.");
+				TutorialManager.Instance.ShowMessage(context);
+
+				_grenadeBt = TutorialManager.Instance.GrenadeBt;
+				BattleMainUi.Instance.ButtonLayoutMgr.ToggleHighlight(_grenadeBt.transform, true);
+
+				_grenadeArea = TutorialManager.Instance.GrenadeAreaDecal;
+				_grenadeArea.SetActiveGo(true);
+
+				TutorialGrenadeArea trigger = _grenadeArea.GetComponent<TutorialGrenadeArea>();
+				trigger.AddBombTriggeredActionListener(OnBombEntered);
+			
+				var gunManager = bl_MFPS.LocalPlayerReferences.gunManager;
+				gunManager.EquipWeapons[3].SetInifinityAmmo(true);
+				
+				UpdateGrenade();
+				await UniTask.WaitUntil(() => _isGrenadeEntered, cancellationToken: TutorialCancelToken);
+				await UniTask.WaitForSeconds(3.0f, cancellationToken: TutorialCancelToken);
 				
 				BattleMainUi.Instance.ButtonLayoutMgr.ToggleHighlight(_grenadeBt.transform, false);
 				TutorialManager.Instance.HideMessage();
@@ -1327,10 +1334,10 @@ namespace Game.View.BattleSystem
 		
 		public override async void Execute()
 		{
-			base.Execute();
-			
 			try
 			{
+				base.Execute();
+				
 				var gunManager = bl_MFPS.LocalPlayerReferences.gunManager;
 				
 				gunManager.CurrentGun.ResetAmmo();
@@ -1353,10 +1360,10 @@ namespace Game.View.BattleSystem
 			
 				await UniTask.WaitUntil(() => 
 						_targetList.TrueForAll(target => target.IsFinished), 
-					cancellationToken: CancellationTokenSource.Token);
+					cancellationToken: TutorialCancelToken);
 				
 				//과녁이 쓰러지는걸 보여주고 끝마침.
-				await UniTask.WaitForSeconds(1.0f, cancellationToken: CancellationTokenSource.Token);
+				await UniTask.WaitForSeconds(1.0f, cancellationToken: TutorialCancelToken);
 			
 				TutorialManager.Instance.HideMessage();
 
@@ -1448,10 +1455,10 @@ namespace Game.View.BattleSystem
 			
 				await UniTask.WaitUntil(() => 
 						_targetList.TrueForAll(target => target.IsFinished), 
-					cancellationToken: CancellationTokenSource.Token);
+					cancellationToken: TutorialCancelToken);
 				
 				//과녁이 쓰러지는걸 보여주고 끝마침.
-				await UniTask.WaitForSeconds(1.0f, cancellationToken: CancellationTokenSource.Token);
+				await UniTask.WaitForSeconds(1.0f, cancellationToken: TutorialCancelToken);
 			
 				TutorialManager.Instance.HideMessage();
 				
@@ -1470,10 +1477,7 @@ namespace Game.View.BattleSystem
 				
 				EndTask();
 			}
-			catch (Exception)
-			{
-				// ignored
-			}
+			catch (OperationCanceledException) { }
 		}
 
 		protected override void Cleanup()
@@ -1506,18 +1510,11 @@ namespace Game.View.BattleSystem
 
 		async UniTaskVoid ShowMessageAfterSec(string message, float duration)
 		{
-			try
-			{
-				await UniTask.WaitForSeconds(
-					duration, 
-					cancellationToken: CancellationTokenSource.Token);
+			await UniTask.WaitForSeconds(
+				duration, 
+				cancellationToken: TutorialCancelToken);
 			
-				TutorialManager.Instance.ShowMessage(message);
-			}
-			catch
-			{
-				// ignored
-			}
+			TutorialManager.Instance.ShowMessage(message);
 		}
 
 		void InitTrainingMark(int markID, Vector3 targetPos, Quaternion targetRot, GameObject trainingMarkObj)
@@ -1583,29 +1580,33 @@ namespace Game.View.BattleSystem
 
 		public override void Execute()
 		{
-			base.Execute();
+			try
+			{
+				base.Execute();
 			
-			int bitFrom = 1 << _fromWeaponSlotIndex;
-			int bitTo = 1 << _toWeaponSlotIndex;
+				int bitFrom = 1 << _fromWeaponSlotIndex;
+				int bitTo = 1 << _toWeaponSlotIndex;
 			
-			int combined = bitFrom | bitTo;
-			int otherButtons = 0b00000000000;
+				int combined = bitFrom | bitTo;
+				int otherButtons = 0b00000000000;
 			
-			int finalResult = otherButtons | combined;
-			TutorialManager.Instance.SetButtonsActive(finalResult);
+				int finalResult = otherButtons | combined;
+				TutorialManager.Instance.SetButtonsActive(finalResult);
 
-			_toWeaponSlot = TutorialManager.Instance.WeaponSwitcherSlotManager
-				.GetSlotButton(_toWeaponSlotIndex)
-				.gameObject;
+				_toWeaponSlot = TutorialManager.Instance.WeaponSwitcherSlotManager
+					.GetSlotButton(_toWeaponSlotIndex)
+					.gameObject;
 			
-			BattleMainUi.Instance.ButtonLayoutMgr.ToggleHighlight(_toWeaponSlot.transform, true);
+				BattleMainUi.Instance.ButtonLayoutMgr.ToggleHighlight(_toWeaponSlot.transform, true);
 			
-			bl_EventHandler.onLocalChangeWeapon += OnWeaponChanged;
+				bl_EventHandler.onLocalChangeWeapon += OnWeaponChanged;
 			
-			_gunManager = bl_MFPS.LocalPlayerReferences.gunManager;
+				_gunManager = bl_MFPS.LocalPlayerReferences.gunManager;
 
-			string context = I18N.Translate("TutorialMode.ChangeWeapon.");
-			TutorialManager.Instance.ShowMessage(context);
+				string context = I18N.Translate("TutorialMode.ChangeWeapon.");
+				TutorialManager.Instance.ShowMessage(context);
+			}
+			catch(OperationCanceledException){ }
 		}
 	}
 
@@ -1657,28 +1658,32 @@ namespace Game.View.BattleSystem
 
 		public override async void Execute()
 		{
-			base.Execute();
-			
-			bl_UtilityHelper.LockCursor(false, LockCursorMask.TutorialPopup);
-			
-			TutorialHelpInfoUiParam uiParam = new TutorialHelpInfoUiParam()
+			try
 			{
-				MainImage = _mainSprite,
-				Header = _header, 
-				Context = _context, 
-				AutoSkip = _autoSkip, 
-				Duration = _duration
-			};
+				base.Execute();
 			
-			TutorialManager.Instance.IsPopupExist = true;
+				bl_UtilityHelper.LockCursor(false, LockCursorMask.TutorialPopup);
 			
-			TutorialHelpInfoUi popUp = Navigator.OpenUi<TutorialHelpInfoUi>(uiParam).Ui;
-			await UniTask.WaitUntil(() => popUp.IsClosed, cancellationToken: CancellationTokenSource.Token);
+				TutorialHelpInfoUiParam uiParam = new TutorialHelpInfoUiParam()
+				{
+					MainImage = _mainSprite,
+					Header = _header, 
+					Context = _context, 
+					AutoSkip = _autoSkip, 
+					Duration = _duration
+				};
 			
-			TutorialManager.Instance.IsPopupExist = false;
-			bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
+				TutorialManager.Instance.IsPopupExist = true;
 			
-			EndTask();
+				TutorialHelpInfoUi popUp = Navigator.OpenUi<TutorialHelpInfoUi>(uiParam).Ui;
+				await UniTask.WaitUntil(() => popUp.IsClosed, cancellationToken: TutorialCancelToken);
+			
+				TutorialManager.Instance.IsPopupExist = false;
+				bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
+			
+				EndTask();
+			}
+			catch(OperationCanceledException){ }
 		}
 	}
 
@@ -1691,20 +1696,24 @@ namespace Game.View.BattleSystem
 
 		public override async void Execute()
 		{
-			base.Execute();
+			try
+			{
+				base.Execute();
 			
-			bl_UtilityHelper.LockCursor(false, LockCursorMask.TutorialPopup);
+				bl_UtilityHelper.LockCursor(false, LockCursorMask.TutorialPopup);
 			
-			TutorialTypeSelectUiParam uiParam = new TutorialTypeSelectUiParam() { OnSelect = OnSelected };
-			TutorialTypeSelectUi popUp = Navigator.OpenUi<TutorialTypeSelectUi>(uiParam).Ui;
+				TutorialTypeSelectUiParam uiParam = new TutorialTypeSelectUiParam() { OnSelect = OnSelected };
+				TutorialTypeSelectUi popUp = Navigator.OpenUi<TutorialTypeSelectUi>(uiParam).Ui;
 
-			TutorialManager.Instance.IsPopupExist = true;
-			await UniTask.WaitUntil(() => popUp.IsClosed, cancellationToken: CancellationTokenSource.Token);
-			TutorialManager.Instance.IsPopupExist = false;
+				TutorialManager.Instance.IsPopupExist = true;
+				await UniTask.WaitUntil(() => popUp.IsClosed, cancellationToken: TutorialCancelToken);
+				TutorialManager.Instance.IsPopupExist = false;
 			
-			bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
+				bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
 
-			EndTask();
+				EndTask();
+			}
+			catch (OperationCanceledException) { }
 		}
 
 		void OnSelected(int selectedIndex)
@@ -1727,73 +1736,70 @@ namespace Game.View.BattleSystem
 
 		public override void Execute()
 		{
-			base.Execute();
+			try
+			{
+				base.Execute();
 			
-			string context = I18N.Translate("TutorialMode.AllFinish.");
-			DoTask(context).Forget();
+				string context = I18N.Translate("TutorialMode.AllFinish.");
+				DoTask(context).Forget();
+			}
+			catch(OperationCanceledException) { }
 		}
 
 		async UniTaskVoid DoTask(string message)
 		{
-			try
+			TutorialManager.Instance.ShowMessage(message);
+			
+			await UniTask.WaitForSeconds(
+				1.0f, 
+				cancellationToken: TutorialCancelToken);
+			
+			TutorialManager.Instance.HideMessage();
+				
+			bl_UtilityHelper.LockCursor(false, LockCursorMask.TutorialPopup);
+			
+			await UniTask.WaitForSeconds(
+				0.5f, 
+				cancellationToken: TutorialCancelToken);
+				
+			//재시작이 가능하게 하려면 이 주석을 해제하여 사용
+			/*
+			var result = await Navigator.ConfirmA(
+				"TutorialMode.Result.Content.",
+				null,
+				"Exit",
+				"TutorialMode.Result.Button.Retry");
+
+			bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
+
+			if (result == UiResult.Primary)
 			{
-				TutorialManager.Instance.ShowMessage(message);
-			
-				await UniTask.WaitForSeconds(
-					1.0f, 
-					cancellationToken: CancellationTokenSource.Token);
-			
-				TutorialManager.Instance.HideMessage();
-				
-				bl_UtilityHelper.LockCursor(false, LockCursorMask.TutorialPopup);
-			
-				await UniTask.WaitForSeconds(
-					0.5f, 
-					cancellationToken: CancellationTokenSource.Token);
-				
-				//재시작이 가능하게 하려면 이 주석을 해제하여 사용
-				/*
-				var result = await Navigator.ConfirmA(
-					"TutorialMode.Result.Content.",
-					null,
-					"Exit",
-					"TutorialMode.Result.Button.Retry");
-				
-				bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
-				
-				if (result == UiResult.Primary)
-				{
-					BattleManager.Instance.SpawnLocalPlayer(Team.Team2);
-                
-					await UniTask.WaitForSeconds(
-						0.5f, 
-						cancellationToken: CancellationTokenSource.Token);
+				BattleManager.Instance.SpawnLocalPlayer(Team.Team2);
 
-					TutorialManager.Instance.RestartTutorial();
-				}
-				else
-				{
-					RoomMenu.Instance.LeaveRoom().Forget();
-					EndTask();
-				}
-				*/
+				await UniTask.WaitForSeconds(
+					0.5f,
+					cancellationToken: CancellationTokenSource.Token);
 
-				//재시작 가능하게 한다면 여기 주석 처리
-				//주석 구간 시작
-				await Navigator.NoticeA(
-					"TutorialMode.Result.Content.",
-					"TutorialMode.AllFinish");
-				
-				bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
-				
-				// RoomMenu.Instance.LeaveRoom().Forget();
+				TutorialManager.Instance.RestartTutorial();
+			}
+			else
+			{
+				RoomMenu.Instance.LeaveRoom().Forget();
 				EndTask();
-				//주석 구간 종료
 			}
-			catch
-			{
-				// ignored
-			}
+			*/
+
+			//재시작 가능하게 한다면 여기 주석 처리
+			//주석 구간 시작
+			await Navigator.NoticeA(
+				"TutorialMode.Result.Content.",
+				"TutorialMode.AllFinish");
+				
+			bl_UtilityHelper.LockCursor(true, LockCursorMask.TutorialPopup);
+				
+			// RoomMenu.Instance.LeaveRoom().Forget();
+			EndTask();
+			//주석 구간 종료
 		}
 
 		protected override void Cleanup()
@@ -1805,9 +1811,9 @@ namespace Game.View.BattleSystem
 	public abstract class TutorialTask
 	{
 		public bool IsFinished;
-		public CancellationTokenSource CancellationTokenSource;
 		
 		protected Hashtable _hashtable;
+		protected CancellationToken TutorialCancelToken => TutorialManager.Instance.TutorialCancellationToken.Token;
 
 		public virtual void Execute() { }
 
@@ -1815,8 +1821,6 @@ namespace Game.View.BattleSystem
 		{
 			_hashtable = new Hashtable();
 			IsFinished = false;
-			
-			CancellationTokenSource = new CancellationTokenSource();
 		}
 
 		//마지막에 반드시 호출
@@ -1831,8 +1835,6 @@ namespace Game.View.BattleSystem
 			IsFinished = true;
 			
 			Cleanup();
-			CancellationTokenSource?.Cancel();
-			CancellationTokenSource?.Dispose();
 		}
 		
 		protected virtual void Cleanup() { }

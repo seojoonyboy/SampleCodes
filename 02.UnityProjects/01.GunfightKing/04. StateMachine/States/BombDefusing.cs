@@ -60,7 +60,7 @@ namespace Game.View.AI.State
 
 			CheckFiring();
 			
-			bool isCloseToBomb = bl_AIManager.Instance.IsCloseToBombInstall(shooterAgent.transform.position);
+			bool isCloseToBomb = bl_AIManager.Instance.IsCloseToBombDefuse(shooterAgent.transform.position);
 
 			// DebugEx.Log("distanceToBomb : " + distanceToBomb);
 

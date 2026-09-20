@@ -98,6 +98,8 @@ public class bl_AIManager : bl_PhotonHelper
 	public bool AllBotsStatsSyncDone { get; private set; }
 
 	DemolitionBombZone targetBombZone;		//AI가 목표로 하는 폭탄 설치 지역
+	public DemolitionBombZone TargetBombZone => targetBombZone;
+	
 	bl_AIShooter bombAssignedShooter;
 	
 	const int MAX_PATH_POINT_NUM = 10;
@@ -400,7 +402,7 @@ public class bl_AIManager : bl_PhotonHelper
 		{
 			return SpawnBot(null, team, null);
 		}
-		else if(AllBots.Find(bot => bot.AIName == slot.Bot) == null)
+		else if(AllBots.Find(bot => bot != null && bot.AIName == slot.Bot) == null)
 		{
 			return SpawnBot(null, team, slot.Bot);
 		}
@@ -894,7 +896,10 @@ public class bl_AIManager : bl_PhotonHelper
 			{
 				List<Vector3> points = new List<Vector3>();
 			
-				List<IGrouping<int, bl_AIShooter>> team1Group = AllBots.FindAll(x => x.AITeam == Team.Team1).GroupBy(x => x.GroupID).ToList();
+				List<IGrouping<int, bl_AIShooter>> team1Group = AllBots
+					.FindAll(x => x != null && x.AITeam == Team.Team1)
+					.GroupBy(x => x.GroupID).ToList();
+
 				foreach (IGrouping<int, bl_AIShooter> groupItem in team1Group)
 				{
 					AIWayPoint endWayPoint = GetRandomEssentialWayPoint();
@@ -1047,6 +1052,7 @@ public class bl_AIManager : bl_PhotonHelper
 		AllBotsTransforms.Remove(agent.AimTarget);
 		for (int i = 0; i < AllBots.Count; i++)
 		{
+			if(AllBots[i] == null) { continue; }
 			AllBots[i].CheckTargets();
 		}
 
@@ -1108,20 +1114,19 @@ public class bl_AIManager : bl_PhotonHelper
 
 		foreach (var bot in AllBots)
 		{
-			if (bot != null)
-			{
-				DebugEx.Log($"[AIManager] Bot Will Destroy.. [{bot.AIName}]");
+			if (bot == null) { continue; }
+			
+			DebugEx.Log($"[AIManager] Bot Will Destroy.. [{bot.AIName}]");
 				
-				SetBotDeath(bot.AIName);
+			SetBotDeath(bot.AIName);
 
-				if (needDestroyList == null)
-				{
-					PhotonNetwork.Destroy(bot.gameObject);
-				}
-				else
-				{
-					needDestroyList.Add(bot.gameObject);
-				}
+			if (needDestroyList == null)
+			{
+				PhotonNetwork.Destroy(bot.gameObject);
+			}
+			else
+			{
+				needDestroyList.Add(bot.gameObject);
 			}
 		}
 		AllBots.Clear();
@@ -1369,7 +1374,7 @@ public class bl_AIManager : bl_PhotonHelper
 		--*/
 		if (replaceBot.HasContent())
 		{
-			bl_AIShooter bot = AllBots.Find(x => x.AIName == replaceBot);
+			bl_AIShooter bot = AllBots.Find(x => x != null && x.AIName == replaceBot);
 			if (bot != null)
 			{
 				PhotonView bv = bot.GetComponent<PhotonView>();
@@ -1816,6 +1821,11 @@ public class bl_AIManager : bl_PhotonHelper
 	{
 		foreach (bl_AIShooter agent in AllBots)
 		{
+			if(agent == null)
+			{
+				continue;
+			}
+
 			if (agent.photonView.ViewID == viewID)
 			{
 				return agent;
@@ -1831,7 +1841,7 @@ public class bl_AIManager : bl_PhotonHelper
 	{
 		foreach (var agent in AllBots)
 		{
-			if (agent.AIName == name)
+			if (agent != null && agent.AIName == name)
 			{
 				return true;
 			}
@@ -1918,12 +1928,18 @@ public class bl_AIManager : bl_PhotonHelper
 		
 		if (GetGameMode == BattleMode.FFA)
 		{
-			for (int i = 0; i < AllBots.Count; i++) { AllBots[i].GroupID = -1; }
+			for (int i = 0; i < AllBots.Count; i++)
+			{
+				if (AllBots[i] != null)
+				{
+					AllBots[i].GroupID = -1;
+				}
+			}
 		}
 		else
 		{
-			List<bl_AIShooter> team1Bots = AllBots.FindAll(x => x.AITeam == Team.Team1);
-			List<bl_AIShooter> team2Bots = AllBots.FindAll(x => x.AITeam == Team.Team2);
+			List<bl_AIShooter> team1Bots = AllBots.FindAll(x => x != null && x.AITeam == Team.Team1);
+			List<bl_AIShooter> team2Bots = AllBots.FindAll(x => x != null && x.AITeam == Team.Team2);
 
 			{
 				int groupIndex = 0;
@@ -1986,7 +2002,8 @@ public class bl_AIManager : bl_PhotonHelper
 
 	public void SetAllBotsToBombArea(Vector3 bombPosition)
 	{
-		foreach (bl_AIShooter terroristBot in AllBots)
+		var terroristBots = AllBots.FindAll(x => x != null && x.AITeam == DemolitionMode.Instance.AttackTeam);
+		foreach (bl_AIShooter terroristBot in terroristBots)
 		{
 			bl_AIShooterAgent shooterAgent = (bl_AIShooterAgent)terroristBot;
 			shooterAgent.CurrentState = new TargetAreaSearching(shooterAgent);
@@ -2000,11 +2017,13 @@ public class bl_AIManager : bl_PhotonHelper
 
 	public bl_AIShooter GetClosestBotFromBombInstalledZone(Team team)
 	{
-		var allBotsInTeam = AllBots.FindAll(x => x.AITeam == team);
+		var allBotsInTeam = AllBots.FindAll(x => x != null && x.AITeam == team);
 		float closestDistance = float.MaxValue;
-		if(DemolitionMode.Instance.PlantingZone == null) return null;
+
+		var bombInstalledZone = DemolitionBombManager.Instance.BombInstalledZone;
+		if(bombInstalledZone == null) return null;
 		
-		Vector3 bombZoneLocation = DemolitionMode.Instance.PlantingZone.transform.position;
+		Vector3 bombZoneLocation = bombInstalledZone.transform.position;
 		bl_AIShooter targetBot = allBotsInTeam.FirstOrDefault();
 		
 		foreach (bl_AIShooter botInTeam in allBotsInTeam)
@@ -2034,7 +2053,7 @@ public class bl_AIManager : bl_PhotonHelper
 		DebugEx.Log($"[bl_AIManager] UpdateBombAssignerGroupPath AllBots Number : {AllBots.Count}");
 		bombAssignedShooter = shooter;
 
-		List<bl_AIShooter> allTeamBots = AllBots.FindAll(x => x.AITeam == shooter.AITeam);
+		List<bl_AIShooter> allTeamBots = AllBots.FindAll(x => x != null && x.AITeam == shooter.AITeam);
 		List<bl_AIShooter> bombAssignedGroup = allTeamBots.FindAll(x => x.GroupID == bombAssignedShooter.GroupID);
 		
 		foreach (bl_AIShooter targetBot in bombAssignedGroup)
@@ -2051,43 +2070,34 @@ public class bl_AIManager : bl_PhotonHelper
 		return bombAssignedShooter.GroupID == shooter.GroupID;
 	}
 
-	public DemolitionBombZone GetRandomDemolitionZone()
+	public DemolitionBombZone SetRandomTargetBombZone()
 	{
-		DemolitionBombManager demolitionBombManager = DemolitionBombManager.Instance;
+		targetBombZone = DemolitionBombManager.Instance.GetRandomDemolitionZone();
+		return targetBombZone;
+	}
+	
+	//이미 설치된 폭탄을 해체하기 위해 설치지역에 가까워졌는가?
+	public bool IsCloseToBombDefuse(Vector3 current)
+	{
+		var bombInstalledZone = DemolitionBombManager.Instance.BombInstalledZone;
+		if(bombInstalledZone == null) { return false; }
 
-		DemolitionBombZone[] demolitionBombZones = demolitionBombManager.GetAllDemolitionZones();
-		if (demolitionBombZones == null)
-		{
-			DebugEx.AILog("[bl_AIManager] GetRandomDemolitionZone() demolitionBombZones을 찾을 수 없습니다!", LogColorType.Red);
-			return null;
-		}
-
-		int rndIndex = Random.Range(0, demolitionBombZones.Length);
-		
-		//test code
-		// rndIndex = 1;
-		
-		return demolitionBombZones[rndIndex];
+		return CloseToBombZone(bombInstalledZone, current);
 	}
 
-	public void SetTargetBombZone(DemolitionBombZone targetBombZone)
-	{
-		this.targetBombZone = targetBombZone;
-	}
-
-	public Vector3? GetTargetBombZone()
-	{
-		if(targetBombZone == null) { return null; }
-		return targetBombZone.transform.position;
-	}
-
+	//폭탄을 설치하기 위해 AIManager가 지정한 타겟 폭탄 설치 지역에 가까워졌는가?
 	public bool IsCloseToBombInstall(Vector3 current)
 	{
 		if(targetBombZone == null) { return false; }
 
-		float bombZoneRadius = targetBombZone.GetComponent<SphereCollider>().radius;
-		float distanceCurrentToBomb = Vector3.Distance(current, targetBombZone.transform.position);
-		// Debug.Log("distanceCurrentToBomb : " + distanceCurrentToBomb);
+		return CloseToBombZone(targetBombZone, current);
+	}
+
+	bool CloseToBombZone(DemolitionBombZone bombZone, Vector3 current)
+	{
+		float bombZoneRadius = bombZone.GetComponent<SphereCollider>().radius;
+		float distanceCurrentToBomb = Vector3.Distance(current, bombZone.transform.position);
+
 		return distanceCurrentToBomb < bombZoneRadius;
 	}
 	

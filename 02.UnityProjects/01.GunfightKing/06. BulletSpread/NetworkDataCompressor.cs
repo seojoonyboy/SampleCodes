@@ -143,8 +143,8 @@ namespace Game.View.BattleSystem
 
 			// 속도는 0.1 (m/s) 해상도로 1바이트로 압축
 
-			var velX = (sbyte)Math.Clamp(Mathf.RoundToInt(vel.x * 10), -127, 127);
-			var velZ = (sbyte)Math.Clamp(Mathf.RoundToInt(vel.z * 10), -127, 127);
+			sbyte velX = (sbyte)Math.Clamp(Mathf.RoundToInt(vel.x * 10), -127, 127);
+			sbyte velZ = (sbyte)Math.Clamp(Mathf.RoundToInt(vel.z * 10), -127, 127);
 			packed |= (ulong)(byte)velX << 32;
 			packed |= (ulong)(byte)velZ << 40;
 

@@ -12,34 +12,25 @@ namespace Game.View.AI.State
 	{
 		public Demolitioning(bl_AIShooterAgent shooterAgent) : base(shooterAgent) {	}
 
+		public override void Enter()
+		{
+			base.Enter();
+			
+			shooterAgent.SetCrouch(true);
+		}
+
 		public override void SlowUpdate()
 		{
 			base.SlowUpdate();
-
-			bool isUpdated = UpdateVeryCloseEnemy();
-			//초근접한 적이 있는 경우, 폭탄 설치를 중단하고, 교전한다.
-			if (isUpdated)
+			
+			//주변에 적이 없고, 폭탄 설치가 가능한 경우
+			DemolitionBombManager demolitionBombManager = DemolitionBombManager.Instance;
+			if (!IsVeryCloseEnemyExist() && demolitionBombManager.CanPlantBomb())
 			{
-				DemolitionBombManager demolitionBombManager = DemolitionBombManager.Instance;
-				demolitionBombManager.BotCancelPlantBomb(shooterAgent.BotMFPSActor);
+				shooterAgent.ToggleMovable(false);
 
-				nextState = GetRandomAttackState();
-				Exit();
-			}
-			//초근접한 적이 없는 경우
-			else
-			{
-				//주변에 적이 없고, 폭탄 설치가 가능한 경우
-				DemolitionBombManager demolitionBombManager = DemolitionBombManager.Instance;
-				if (!IsVeryCloseEnemyExist() && demolitionBombManager.CanPlantBomb())
-				{
-					if (!shooterAgent.IsCrouch) { shooterAgent.SetCrouch(true); }
-					
-					shooterAgent.ToggleMovable(false);
-
-					DebugEx.Log("[" + shooterAgent.name + "]" + " Case 100 planting bomb....");
-					demolitionBombManager.BotPlantBomb(shooterAgent.BotMFPSActor, OnBombPlantFinished);
-				}
+				DebugEx.Log($"[Bomb] {shooterAgent.name} 폭탄 설치중");
+				demolitionBombManager.BotPlantBomb(shooterAgent.BotMFPSActor, OnBombPlantFinished);
 			}
 		}
 

@@ -24,16 +24,30 @@ Sample Code
 > Bot AI 엄폐 지점(CoverPoint) 배치 및 관리 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/01.%20CoverPoint)   
 > Bot AI 이동 경로(WayPoint) 그래프 및 팀/개인전 분기 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/02.%20WayPoint)   
 > Bot AI 행동 패턴(FSM) 설계 - 탐색/공격/폭탄모드/회피 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/04.%20StateMachine)   
-> Bot AI 전체를 관리하는 매니저 (문서 미작성, 코드 참고용) [폴더 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/07.%20MasterClientBotManaging)   
+> Master Client 기반 Bot 총괄 관리 - 생성/슬롯/Master 이전/난이도 데이터(BotDef)/KD 기반 사격 지연 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/07.%20MasterClientBotManaging)   
 
 *전투/네트워크*
 > 무기별 탄퍼짐 로직 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/06.%20BulletSpread)   
-> Photon PUN2 기반 Bot 위치/상태 압축 동기화 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/05.%20PhotonNetwork)   
+> Photon PUN2 기반 Bot 위치/상태 압축 동기화 (1차 필드별 → 2차 단일 `long` 패킹, 왕복 단위 테스트 포함) [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/05.%20PhotonNetwork)   
 
 *싱글플레이 콘텐츠*
-> 연습모드 / 폭탄해체 트레이닝 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/03.%20Practice)   
+> 연습모드 / 폭탄해체 트레이닝 설계 (엑셀 기반 `PracticeModeDef`, 표적 `TrainingMark`) [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/03.%20Practice)   
 > UniTask 기반 튜토리얼 태스크 큐 설계 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/03.%20Tutorial)   
 
 *라이브 서비스 안정화/보안*
 > 해킹방지를 위한 코드 난독화 작업 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/08.%20Obfuscator)   
 > Firebase Crashlytics를 연계한 라이브 서비스 모니터링 및 안정화 작업 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/09.%20Firebase)   
+
+읽는 순서 안내
+============================
+> 문서마다 `근거`(확인한 코드/이력)와 `한계와 개선 방향`을 함께 적었다. 성과 수치 중 코드로 재현되지 않는 것은 근거에 그렇게 밝혔다.
+
+| 보고 싶은 것 | 폴더 | 핵심 파일 |
+|---|---|---|
+| 봇 AI를 어떻게 설계했는가 | 01, 02, 04 | `bl_AICoverPoint*.cs`, `AIWayPoint.cs`, `States/*.cs`, `Bot.xlsx` |
+| 봇이 멀티플레이에서 어떻게 돌아가는가 | 07, 05 | `bl_AIManager.cs`, `bl_AIShooterAgent.cs`, `bl_AIShooterNetwork.cs` |
+| 데이터 주도 설계와 검증 | 03, 05, 06, 07 | `PracticeModeDef.cs`, `BotDef.cs`, `Weapon.xlsx`, `PlayerNetworkCompressTest.cs` |
+| 비동기 콘텐츠 흐름 | 03 | `TutorialManager.cs`, `PracticeMode.cs`, `TrainingMark.cs` |
+| 라이브 운영 안정성/보안 | 08, 09 | `AppBuilder.cs`, `ObfuscatorSettingsModifier.cs`, Crashlytics 브레드크럼 |
+
+> 공개 저장소이므로 서명 키스토어 비밀번호처럼 민감한 값은 샘플에서 제거했다(`08. Obfuscator/AppBuilder.cs`는 빌드 서버 환경변수에서 읽는 형태로 바꿔서 실었다).

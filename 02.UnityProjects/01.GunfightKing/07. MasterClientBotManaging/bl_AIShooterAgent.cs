@@ -209,7 +209,7 @@ public class bl_AIShooterAgent : bl_AIShooter
 		bl_AIManager.SetHealth(this);
 		
 		ResetShootDelayTimer(null, true);
-		//DebugEx.Log($"[ShootDelay] 첫 소환에 의한 Delay 초기화 [case001]");
+		DebugEx.Log($"[ShootDelay] 첫 소환에 의한 Delay 초기화 [case001]");
 		
 		InitGun();
 		
@@ -1416,23 +1416,12 @@ public class bl_AIShooterAgent : bl_AIShooter
 					float? kdrValue = BattleManager.Instance.GetKDValueIfRealPlayer(view.ViewID);
 					float[] immatureKDRange = MiscCDB.Instance.ImmatureUserKD;
 
-					/*
-					if (kdrValue.HasValue)
-					{
-						DebugEx.Log($"[Bot] BotCDB ID : {aiSettings.No}, 타겟의 KDR 값 {kdrValue.Value}");	
-					}
-					*/
-
 					if (kdrValue.HasValue)
 					{
 						var clampedKdr = Mathf.Clamp(
 							kdrValue.Value, 
 							immatureKDRange[0], 
 							immatureKDRange[1]);
-
-						//test code
-						//clampedKdr = 6.0f;
-						//end test code 
 						
 						//immatureKDRange 에서 정규화된 kdr값의 위치를 찾고
 						float t = Mathf.InverseLerp(

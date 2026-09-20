@@ -100,12 +100,8 @@ public sealed class bl_AIShooterNetwork : bl_MonoBehaviour, IPunObservable
 		{
 			if (GVConstants.UsePhotonStreamCompress)
 			{
-				stream.SendNext(Compressor.CompressPosXZ(m_Transform.localPosition));
+				stream.SendNext(Compressor.CompressBotStatus(m_Transform.localPosition, Agent.velocity, m_Transform.localRotation.eulerAngles.y, References.aiShooter.LookAtPitch));
 				stream.SendNext(Compressor.CompressPosY(m_Transform.localPosition));
-				stream.SendNext(Compressor.CompressAngle(m_Transform.localRotation.eulerAngles.y));
-				stream.SendNext(Compressor.CompressVelocityXZ(Agent.velocity));
-				stream.SendNext(Compressor.CompressVelocityY(Agent.velocity));
-				stream.SendNext(Compressor.CompressBotLook(References.aiShooter.LookAtPosition, References.aiShooter.LookAtPitch));
 			}
 			else
 			{
@@ -120,17 +116,21 @@ public sealed class bl_AIShooterNetwork : bl_MonoBehaviour, IPunObservable
 		{
 			if (GVConstants.UsePhotonStreamCompress)
 			{
-				int posXZ = (int)stream.ReceiveNext();
+				long status = (long)stream.ReceiveNext();
 				short posY = (short)stream.ReceiveNext();
-				byte rotationYaw = (byte)stream.ReceiveNext();
-				int velXZ = (int)stream.ReceiveNext();
-				short velY = (short)stream.ReceiveNext();
-				long botLook = (long)stream.ReceiveNext();
 
-				correctPlayerPos = Compressor.DecompressPos(posXZ, posY);
-				correctPlayerRot = Quaternion.Euler(0, Compressor.DecompressAngle(rotationYaw), 0);
-				Velocity = Compressor.DecompressVelocity(velXZ, velY);
-				Compressor.DecompressBotLook(botLook, out networkLookAtPosition, out _networkLookAtPitch);
+				Vector3 pos;
+				Vector3 vel;
+				float heading;
+				float pitch;
+				Compressor.DecompressBotStatus(status, out pos, out vel, out heading, out pitch);
+				
+				correctPlayerPos.x = pos.x;
+				correctPlayerPos.z = pos.z;
+				correctPlayerPos.y = posY / 100f;
+				correctPlayerRot = Quaternion.Euler(0, heading, 0);
+				Velocity = vel;
+				_networkLookAtPitch = pitch;
 			}
 			else
 			{
@@ -192,6 +192,29 @@ public sealed class bl_AIShooterNetwork : bl_MonoBehaviour, IPunObservable
 		{
 			bl_AIManager.UpdateBotView(References.aiShooter, photonView.ViewID);
 		}
+	}
+	
+	//Slave에게 Jump 애니메이션 재생을 요청한다.
+	public void SendRPCJump(string nickName)
+	{
+		photonView.RPC(nameof(JumpSync), RpcTarget.Others, nickName);
+	}
+	
+	[PunRPC]
+	void JumpSync(string nickName)
+	{
+		PlayerSeat targetBot = BattleManager.Instance.FindMFPSPlayerByNickname(nickName);
+		
+		if(targetBot == null) return;
+		if(!targetBot.IsAlive) return;
+
+		var shooterAgent = targetBot.Actor.GetComponent<bl_AIShooterAgent>();
+		if (shooterAgent == null) return;
+		
+		AIAnimation aiAnimation = shooterAgent.References.aiAnimation as AIAnimation;
+		if (aiAnimation == null) return;
+		
+		aiAnimation.ReplicaJump();
 	}
 
 	/// <summary>

@@ -1,7 +1,10 @@
 using Framework;
+using Game.View.BattleSystem;
 using MFPS.Runtime.AI;
+using System;
 using UnityEngine;
 using UnityEngine.AI;
+using Random = UnityEngine.Random;
 
 namespace Game.View.AI.State
 {
@@ -10,16 +13,32 @@ namespace Game.View.AI.State
 	/// </summary>
 	public class Attacking : IAIState
 	{
+		protected float MAX_MOVE_BACKWARD_TIME = 1.0f;		//몇초 동안 근접했을 때 뒤로 물러나는 수행을 할것인가
+		protected float _moveBackwardTime = 0.0f;		//현재 뒤로 물러나는 수행을 진행한 시간
+		protected bool _flagMoveBackward;
+		
 		public Attacking(bl_AIShooterAgent shooterAgent) : base(shooterAgent)
 		{
 			if(shooterAgent.IsCrouch) shooterAgent.SetCrouch(false);
+			
+			//상태가 공격상태로 새롭게 전환되면 사격 Delay를 초기화한다.
+			shooterAgent.ResetShootDelayTimer(this.shooterAgent.Target);
+			
+			IsVisibleTarget(shooterAgent.Target);
+
+			_flagMoveBackward = false;
+			
+			//DebugEx.Log($"[ShootDelay] 공격 상태 전환에 의한 Delay 초기화 [case002]");
+			//DebugEx.Log($"{base.shooterAgent.AIName} 공격 상태 전환 {GetType().Name}");
 		}
 		
 		public override void Update()
 		{
 			base.Update();
 
-			if (shooterAgent.IsAlive()) { CheckFiring(); }
+			if (!shooterAgent.IsAlive()) return;
+			
+			CheckFiring();
 		}
 
 		/// <summary>
@@ -41,7 +60,9 @@ namespace Game.View.AI.State
 					shooterAgent.References.shooterWeapon.FiringInaccuracyOffset = 
 						IsBarrierAreaFront(agentTarget) ? 2.0f : 1.0f;
 					
-					if (IsFront(agentTarget)) { shooterAgent.TriggerFire(fireReason); }
+					DecideRandomSpeed();
+					
+					shooterAgent.TriggerFire(fireReason);
 					
 					shooterAgent.SetLookAtState(AILookAt.Target);
 				}
@@ -60,11 +81,72 @@ namespace Game.View.AI.State
 			Exit();
 		}
 
+		protected void MoveBackwardIfTooCloseToTarget()
+		{
+			if(_moveBackwardTime > MAX_MOVE_BACKWARD_TIME) return;
+			_moveBackwardTime += Time.deltaTime;
+			
+			if (shooterAgent.Target == null) return;
+			
+			float distToTarget = bl_UtilityHelper.Distance2D(
+				shooterAgent.Target.position,
+				shooterAgent.transform.position);
+
+			float stopDistance = shooterAgent.aiSettings.StopDistance * 0.5f;
+
+			// 너무 가까우면 뒤로 빠질 목적지 계산
+			if (distToTarget < stopDistance && !_flagMoveBackward)
+			{
+				if(shooterAgent.Agent.isStopped) shooterAgent.ToggleMovable(true);
+				
+				_isBackingOff = true;
+				
+				shooterAgent.Agent.speed = 2.0f;
+				// 타겟에서 나 쪽 방향 → 반대로(타겟으로부터 멀어지는 방향)
+				Vector3 awayDir = (shooterAgent.transform.position - shooterAgent.Target.position);
+				awayDir.y = 0;
+				awayDir.Normalize();
+
+				// stopDistance보다 좀 더 떨어진 위치를 목표로
+				float desiredDistance = stopDistance;
+				Vector3 desiredPos = shooterAgent.Target.position + awayDir * desiredDistance;
+
+				// NavMesh에 투영
+				if (NavMesh.SamplePosition(desiredPos, out NavMeshHit hit, 1.0f, NavMesh.AllAreas))
+				{
+					shooterAgent.SetDestination(hit.position);
+					shooterAgent.SetLookAtState(AILookAt.Target);
+				}
+
+				// 뒤로 빠지는 동안 재경로 시간 초기화
+				currentRepathTime = 0f;
+				_flagMoveBackward = true;
+			}
+			else
+			{
+				_isBackingOff = false;
+			}
+		}
+
 		protected void SetCrouchOrStand()
 		{
 			int rndIndex = Random.Range(0, 2);
 			bool isCrouch = rndIndex == 1;
+
+			if (isCrouch)
+			{
+				shooterAgent.Agent.speed = shooterAgent.aiSettings.CrouchSpeed;
+			}
+			
 			shooterAgent.SetCrouch(isCrouch);
+		}
+
+		protected override void DecideRandomSpeed()
+		{
+			bool toWalk = Random.Range(0, 100) < 90;
+			shooterAgent.Agent.speed = toWalk ? 
+				shooterAgent.aiSettings.WalkSpeed : 
+				shooterAgent.aiSettings.RunSpeed;
 		}
 	}
 
@@ -73,7 +155,7 @@ namespace Game.View.AI.State
 	/// </summary>
 	public class AggressiveAttacking : Attacking
 	{
-		private float _agressiveTime = 5.0f;		//회피 공격을 유지하는 시간(초)
+		private float _agressiveTime = 3.0f;		//저돌적 공격을 유지하는 시간
 		private float _currentAggresiveTime = 0.0f;
 		
 		public AggressiveAttacking(bl_AIShooterAgent shooterAgent) : base(shooterAgent) { }
@@ -83,19 +165,22 @@ namespace Game.View.AI.State
 			base.Enter();
 
 			_agressiveTime = shooterAgent.aiSettings.AttackBehaviorRemainTimes[0];
+			_moveBackwardTime = 0.0f;
+			
+			shooterAgent.SetLookAtState(AILookAt.Target);
 		}
 
 		public override void Update()
 		{
 			if (_currentAggresiveTime > _agressiveTime)
 			{
-				nextState = IsVisibleTarget(shooterAgent.Target) ? 
+				nextState = shooterAgent.Target != null ? 
 					GetRandomAttackState() : 
 					new Searching(shooterAgent);
 				
 				Exit();
 			}
-			
+
 			_currentAggresiveTime += Time.deltaTime;
 		}
 	}
@@ -121,10 +206,13 @@ namespace Game.View.AI.State
 			//총알이 날아온 방향 (추측)
 			Vector3 targetCoverPoint = GetCloseCoverPoint(lastHitDirection * 10.0f);
 			
+			DebugEx.Log($"{shooterAgent.AIName} target cover point: {targetCoverPoint}");
+			
 			shooterAgent.SetLookAtState(AILookAt.Target);
 			shooterAgent.SetDestination(targetCoverPoint);
 
 			_currentAvoidTime = 0.0f;
+			_moveBackwardTime = 0.0f;
 			
 			SetCrouchOrStand();
 		}
@@ -168,8 +256,10 @@ namespace Game.View.AI.State
 
 			Vector3 rndTargetMovePosition = DecideRandomMove();
 			shooterAgent.SetDestination(rndTargetMovePosition);
+			
 			_movingAttackTime = shooterAgent.aiSettings.AttackBehaviorRemainTimes[2];
-
+			_moveBackwardTime = 0.0f;
+			
 			SetCrouchOrStand();
 		}
 
@@ -203,8 +293,8 @@ namespace Game.View.AI.State
 	/// </summary>
 	public class HoldingPositionAttacking : Attacking
 	{
-		float holdingPositionTime = 5.0f;
-		float passTime = 0.0f;
+		float _holdingPositionTime = 5.0f;
+		float _holdingPassTime = 0.0f;
 		
 		public HoldingPositionAttacking(bl_AIShooterAgent shooterAgent) : base(shooterAgent) { }
 		
@@ -213,21 +303,34 @@ namespace Game.View.AI.State
 			base.Enter();
 			
 			shooterAgent.ToggleMovable(false);
-			holdingPositionTime = shooterAgent.aiSettings.AttackBehaviorRemainTimes[1];
+			_holdingPositionTime = shooterAgent.aiSettings.AttackBehaviorRemainTimes[1];
+			_holdingPassTime = 0.0f;
 			
-			passTime = 0.0f;
+			_moveBackwardTime = 0.0f;
 		}
 
 		public override void Update()
 		{
 			base.Update();
 			
-			passTime += Time.deltaTime;
+			_holdingPassTime += Time.deltaTime;
 
-			if (passTime >= holdingPositionTime)
+			if (!IsVisibleTarget())
 			{
-				nextState = GetRandomAttackState();
+				nextState = new Searching(shooterAgent);
 				Exit();
+			}
+			else
+			{
+				if (_holdingPassTime >= _holdingPositionTime)
+				{
+					nextState = GetRandomAttackState();
+					Exit();
+				}
+				else
+				{
+					MoveBackwardIfTooCloseToTarget();
+				}
 			}
 		}
 	}
@@ -249,6 +352,10 @@ namespace Game.View.AI.State
 			base.Enter();
 
 			coveringTime = shooterAgent.aiSettings.AttackBehaviorRemainTimes[3];
+			_moveBackwardTime = 0.0f;
+			
+			shooterAgent.SetLookAtState(AILookAt.Target);
+			
 			MoveToNextCoverPoint();
 		}
 
