@@ -37,17 +37,3 @@ Sample Code
 *라이브 서비스 안정화/보안*
 > 해킹방지를 위한 코드 난독화 작업 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/08.%20Obfuscator)   
 > Firebase Crashlytics를 연계한 라이브 서비스 모니터링 및 안정화 작업 [코드 샘플 링크](https://github.com/seojoonyboy/SampleCodes/tree/main/02.UnityProjects/01.GunfightKing/09.%20Firebase)   
-
-읽는 순서 안내
-============================
-> 문서마다 `근거`(확인한 코드/이력)와 `한계와 개선 방향`을 함께 적었다. 성과 수치 중 코드로 재현되지 않는 것은 근거에 그렇게 밝혔다.
-
-| 주제 | 폴더 | 핵심 파일(코드) |
-|---|---|---|
-| 봇 AI를 어떻게 설계했는가 | 01, 02, 04 | `bl_AICoverPoint*.cs`, `AIWayPoint.cs`, `States/*.cs`, `Bot.xlsx` |
-| 봇이 멀티플레이에서 어떻게 돌아가는가 | 07, 05 | `bl_AIManager.cs`, `bl_AIShooterAgent.cs`, `bl_AIShooterNetwork.cs` |
-| 데이터 주도 설계와 검증 | 03, 05, 06, 07 | `PracticeModeDef.cs`, `BotDef.cs`, `Weapon.xlsx`, `PlayerNetworkCompressTest.cs` |
-| 비동기 콘텐츠 흐름 | 03 | `TutorialManager.cs`, `PracticeMode.cs`, `TrainingMark.cs` |
-| 라이브 운영 안정성/보안 | 08, 09 | `AppBuilder.cs`, `ObfuscatorSettingsModifier.cs`, Crashlytics 브레드크럼 |
-
-> 공개 저장소이므로 서명 키스토어 비밀번호처럼 민감한 값은 샘플에서 제거했다(`08. Obfuscator/AppBuilder.cs`는 빌드 서버 환경변수에서 읽는 형태로 바꿔서 실었다).
