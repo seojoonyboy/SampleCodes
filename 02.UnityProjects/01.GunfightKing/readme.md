@@ -42,7 +42,7 @@ Sample Code
 ============================
 > 문서마다 `근거`(확인한 코드/이력)와 `한계와 개선 방향`을 함께 적었다. 성과 수치 중 코드로 재현되지 않는 것은 근거에 그렇게 밝혔다.
 
-| 보고 싶은 것 | 폴더 | 핵심 파일 |
+| 주제 | 폴더 | 핵심 파일(코드) |
 |---|---|---|
 | 봇 AI를 어떻게 설계했는가 | 01, 02, 04 | `bl_AICoverPoint*.cs`, `AIWayPoint.cs`, `States/*.cs`, `Bot.xlsx` |
 | 봇이 멀티플레이에서 어떻게 돌아가는가 | 07, 05 | `bl_AIManager.cs`, `bl_AIShooterAgent.cs`, `bl_AIShooterNetwork.cs` |
